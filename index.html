@@ -417,6 +417,11 @@
                         <label for="form-message">Cuéntame tu situación...</label>
                         <div class="form-line"></div>
                     </div>
+                    <!-- Honeypot anti-bot (invisible para humanos) -->
+                    <div class="form-group" style="position:absolute;left:-9999px;top:-9999px;opacity:0;height:0;overflow:hidden;" aria-hidden="true" tabindex="-1">
+                        <input type="text" id="form-website" name="website" autocomplete="off" tabindex="-1">
+                        <label for="form-website">Website</label>
+                    </div>
                     <button type="submit" id="form-submit" class="btn btn-primary btn-submit">
                         <span class="btn-text">Enviar Mensaje</span>
                         <span class="btn-loading">
