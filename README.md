@@ -1,41 +1,29 @@
 # BryTech Solutions 🚀
 
-Sitio web profesional, de alto rendimiento y moderno para **BryTech Solutions**, un negocio local de soporte técnico y servicios IT ubicado en Santiago de Querétaro, México. 
+Sitio web oficial de **BryTech Solutions**, servicios profesionales de soporte técnico y soluciones IT en Querétaro.
 
-El sitio está diseñado para servir como catálogo de servicios, tarjeta de presentación y punto de contacto directo para clientes.
+Esta plataforma sirve como catálogo de servicios, tarjeta de presentación digital y punto de contacto principal para clientes locales que buscan soluciones tecnológicas de alto rendimiento.
 
 ## 🌟 Características
 
-*   **Diseño Moderno "Cyber Tech":** Glassmorphism, paleta oscura con gradientes vivos (Cyan/Púrpura) e interacciones 3D (tilt en tarjetas de servicio).
-*   **Animaciones Dinámicas:** 
-    *   Partículas animadas en Canvas en la sección *Hero*.
-    *   Efecto "Typing" para el eslogan principal.
-    *   Animaciones suaves al hacer scroll (basadas en IntersectionObserver).
-    *   *Cursor glow* para escritorio.
-*   **Responsividad Total:** Adaptado perfectamente para móviles, tablets y escritorios.
-*   **Integración de Formulario Seguro:** 
-    *   Formulario de contacto real usando **EmailJS**.
-    *   Doble plantilla: Notificación interna al dueño + Auto-respuesta de cortesía al cliente.
-*   **Seguridad Avanzada Anti-Spam:**
-    *   Campo **Honeypot** oculto para atrapar bots automatizados (fake success y drop).
-    *   **Rate limiting** (máx. 3 envíos cada 10 mins).
-    *   **Cooldown** de 60 segundos entre re-envíos sucesivos (evita el doble click accidental o spam intenso).
-    *   Sanitización de inputs contra vectores XSS.
-    *   Bloqueo activo de proveedores de "disposable emails".
-    *   Validaciones extra de longitud de campo y contenido.
+* **Diseño Moderno:** Interfaz con estética "Cyber Tech", *glassmorphism* y experiencias visuales inmersivas.
+* **Optimización Total:** Arquitectura ligera diseñada para una carga ultrarrápida en móviles y escritorio.
+* **Comunicación Segura:** Sistema de contacto profesional con protocolos integrados de seguridad y filtrado de datos.
+* **Experiencia de Usuario:** Animaciones dinámicas y navegación fluida basada en estándares modernos de UX.
 
 ## 🛠️ Stack Tecnológico
 
-*   **Core:** HTML5, CSS3 (Vanilla), JavaScript (ES6+).
-*   **Build Tool:** Vite (Para un desarrollo ultrarrápido y bundling automático).
-*   **Integraciones:** `@emailjs/browser` (No require servidor backend para enviar correos).
-*   **Deploy:** Optimizado y preconfigurado para Vercel.
+* **Core:** HTML5, CSS3, JavaScript (ES6+).
+* **Build Tool:** Vite.
+* **Infraestructura:** Desplegado y optimizado para Vercel.
 
-## 🚀 Instalación y Desarrollo (Local)
+## 🚀 Instalación y Desarrollo
+
+Para ejecutar el entorno de desarrollo localmente:
 
 1.  **Clona el repositorio**
     ```bash
-    git clone https://github.com/BryGP/brytech-solutions.git
+    git clone [https://github.com/BryGP/brytech-solutions.git](https://github.com/BryGP/brytech-solutions.git)
     cd brytech-solutions
     ```
 
@@ -44,29 +32,14 @@ El sitio está diseñado para servir como catálogo de servicios, tarjeta de pre
     npm install
     ```
 
-3.  **Inicia el servidor de desarrollo**
+3.  **Inicia el servidor**
     ```bash
     npm run dev
     ```
-    El sitio estará disponible para desarrollo local en `http://localhost:3000`. Vite proporcionará recarga automática al guardar (HMR).
 
-## 📦 Despliegue en Producción
+## 🎨 Personalización
 
-Para desplegar a producción (Vercel):
-
-1.  Asegúrate de que estás conectado a tu cuenta de Vercel (o regístrate gratis).
-2.  Importa el repositorio desde tu cuenta de Github.
-3.  Vercel automáticamente detectará que usas **Vite**. La configuración contenida en el archivo `vercel.json` y los scripts de package.json aseguran que el entorno funcione inmediatamente.
-4.  Haz clic en *Deploy*. 
-
-Tu sitio ahora reside en: [https://brygp-solutions.vercel.app](https://brygp-solutions.vercel.app)
-
-## 🎨 Modificaciones y Personalización
-
-*   **Variables de diseño:** Todos los colores primarios y dimensiones se controlan via CSS Variables (`:root` al principio de `style.css`).
-*   **Servicios:** Se pueden agregar/quitar tarjetas en `<section id="services">` del `index.html`. 
-*   **EmailJS:** Para cambiar el destino de correos o las plantillas, actualiza las constantes `EMAILJS_CONFIG` dentro de `src/contact.js`.
+El proyecto está estructurado mediante variables globales y componentes modulares, permitiendo un mantenimiento ágil del catálogo de servicios y la identidad visual de la marca.
 
 ---
-
-✒️ Hecho con dedicación profesional por [BryGP](https://github.com/BryGP)
+✒️ Desarrollado por [BryGP](https://github.com/BryGP) — *Soluciones IT con visión de futuro.*
