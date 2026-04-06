@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "author": "Bryan Alejandro González Peñaloza",
+  "author": "Bryan Alejandro Gonzalez Peñaloza",
   "license": "MIT",
   "devDependencies": {
     "vite": "^6.0.0"
