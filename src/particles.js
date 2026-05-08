@@ -1,8 +1,27 @@
 /* ============================================================
-   BryTech Solutions — Particle System
-   Canvas-based animated particle network
+   particles.js -- BryTech Solutions
+   ------------------------------------------------------------
+   Canvas-based animated particle network for the hero section.
+   Renders floating particles that drift, pulse in opacity, and
+   repel away from the mouse cursor. Nearby particles are
+   connected with translucent lines to create a network effect.
+
+   Performance considerations:
+     - Particle count adapts to viewport width (30-80).
+     - Animation pauses when the browser tab is hidden.
+     - Canvas resizes with debounced window resize events.
+     - Touch events are supported for mobile interaction.
+
+   Requires: a <canvas> element with id "particles-canvas"
+   inside the hero section.
+
+   (c) 2026 BryTech Solutions -- bryanalejandroprog17@gmail.com
    ============================================================ */
 
+
+/* ============================================================
+   INITIALIZATION AND CONFIGURATION
+   ============================================================ */
 export function initParticles() {
   const canvas = document.getElementById('particles-canvas');
   if (!canvas) return;
@@ -13,6 +32,7 @@ export function initParticles() {
   let mouse = { x: null, y: null, radius: 150 };
   let animationId;
 
+  // Visual and behavioral settings for the particle system.
   const CONFIG = {
     particleCount: getParticleCount(),
     maxDistance: 120,
@@ -27,6 +47,13 @@ export function initParticles() {
     ]
   };
 
+
+  /* ============================================================
+     RESPONSIVE PARTICLE COUNT
+     ------------------------------------------------------------
+     Returns a particle count proportional to the viewport width
+     to keep performance consistent across devices.
+     ============================================================ */
   function getParticleCount() {
     const w = window.innerWidth;
     if (w < 480) return 30;
@@ -35,11 +62,21 @@ export function initParticles() {
     return 80;
   }
 
+
+  /* ============================================================
+     PARTICLE CLASS
+     ------------------------------------------------------------
+     Each particle has a position, size, velocity, color, and a
+     pulsing opacity. On each frame it moves, pulses, reacts to
+     mouse proximity, and wraps around the canvas edges.
+     ============================================================ */
   class Particle {
     constructor() {
       this.reset();
     }
 
+    // Assigns random initial values for position, size, speed,
+    // color, and opacity pulse parameters.
     reset() {
       this.x = Math.random() * width;
       this.y = Math.random() * height;
@@ -52,14 +89,17 @@ export function initParticles() {
       this.pulsePhase = Math.random() * Math.PI * 2;
     }
 
+    // Advances position, applies opacity pulse, applies mouse
+    // repulsion force, and wraps around canvas boundaries.
     update(time) {
       this.x += this.speedX;
       this.y += this.speedY;
 
-      // Pulse opacity
+      // Sinusoidal opacity pulse for a subtle breathing effect.
       this.currentOpacity = this.opacity + Math.sin(time * this.pulseSpeed + this.pulsePhase) * 0.15;
 
-      // Mouse repulsion
+      // Mouse repulsion: pushes particles away from the cursor
+      // with a force inversely proportional to distance.
       if (mouse.x !== null) {
         const dx = this.x - mouse.x;
         const dy = this.y - mouse.y;
@@ -73,13 +113,14 @@ export function initParticles() {
         }
       }
 
-      // Wrap around edges
+      // Wrap around edges with a 10 px buffer to avoid popping.
       if (this.x < -10) this.x = width + 10;
       if (this.x > width + 10) this.x = -10;
       if (this.y < -10) this.y = height + 10;
       if (this.y > height + 10) this.y = -10;
     }
 
+    // Renders the particle as a filled circle on the canvas.
     draw() {
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
@@ -88,12 +129,19 @@ export function initParticles() {
     }
   }
 
+
+  /* ============================================================
+     CANVAS RESIZE HANDLER
+     ------------------------------------------------------------
+     Matches the canvas dimensions to its parent container. If
+     the particle count has shifted significantly (>10), the
+     particle array is rebuilt to match the new target count.
+     ============================================================ */
   function resize() {
     const section = canvas.parentElement;
     width = canvas.width = section.offsetWidth;
     height = canvas.height = section.offsetHeight;
 
-    // Reinit particles on resize
     const newCount = getParticleCount();
     if (Math.abs(particles.length - newCount) > 10) {
       particles = [];
@@ -103,6 +151,14 @@ export function initParticles() {
     }
   }
 
+
+  /* ============================================================
+     NETWORK LINES
+     ------------------------------------------------------------
+     Draws translucent cyan lines between particles that are
+     within CONFIG.maxDistance of each other. Line opacity fades
+     as distance increases toward the threshold.
+     ============================================================ */
   function drawLines() {
     for (let i = 0; i < particles.length; i++) {
       for (let j = i + 1; j < particles.length; j++) {
@@ -123,6 +179,13 @@ export function initParticles() {
     }
   }
 
+
+  /* ============================================================
+     ANIMATION LOOP
+     ------------------------------------------------------------
+     Clears the canvas, updates and draws every particle, then
+     renders the connecting lines. Runs via requestAnimationFrame.
+     ============================================================ */
   function animate(time) {
     ctx.clearRect(0, 0, width, height);
 
@@ -135,19 +198,26 @@ export function initParticles() {
     animationId = requestAnimationFrame(animate);
   }
 
-  // Mouse tracking
+
+  /* ============================================================
+     EVENT LISTENERS
+     ============================================================ */
+
+  // Updates mouse coordinates relative to the canvas on move.
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
     mouse.x = e.clientX - rect.left;
     mouse.y = e.clientY - rect.top;
   });
 
+  // Clears mouse position when the cursor leaves the canvas.
   canvas.addEventListener('mouseleave', () => {
     mouse.x = null;
     mouse.y = null;
   });
 
-  // Touch support
+  // Touch support: tracks the first touch point for mobile
+  // interaction with the particle repulsion effect.
   canvas.addEventListener('touchmove', (e) => {
     const rect = canvas.getBoundingClientRect();
     const touch = e.touches[0];
@@ -155,28 +225,35 @@ export function initParticles() {
     mouse.y = touch.clientY - rect.top;
   }, { passive: true });
 
+  // Clears touch position when the finger is lifted.
   canvas.addEventListener('touchend', () => {
     mouse.x = null;
     mouse.y = null;
   });
 
-  // Initialize
+
+  /* ============================================================
+     BOOTSTRAP
+     ============================================================ */
+
+  // Set initial canvas size and create the particle array.
   resize();
   for (let i = 0; i < CONFIG.particleCount; i++) {
     particles.push(new Particle());
   }
 
-  // Start animation
+  // Start the animation loop.
   animate(0);
 
-  // Handle resize with debounce
+  // Debounced resize handler (250 ms delay).
   let resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(resize, 250);
   });
 
-  // Reduce animation when tab is not visible
+  // Pauses the animation when the tab loses focus to save CPU,
+  // and resumes when the tab becomes visible again.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       cancelAnimationFrame(animationId);

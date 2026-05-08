@@ -1,6 +1,31 @@
 /* ============================================================
-   BryTech Solutions — Design System & Styles
-   Tu tech, a tu manera
+   style.css -- BryTech Solutions
+   ------------------------------------------------------------
+   Complete design system and component styles for the landing
+   page. Organized into the following sections:
+
+     CSS CUSTOM PROPERTIES  - Design tokens (colors, fonts,
+                              spacing, animation curves, radii).
+     RESET AND BASE         - Box-model reset, scrollbar, body,
+                              links, selection, container.
+     CURSOR GLOW            - Desktop-only ambient light effect.
+     GRADIENT TEXT           - Reusable gradient text utility.
+     SECTION COMMON         - Shared header, tag, title, subtitle.
+     SCROLL ANIMATION       - Intersection-driven reveal classes.
+     NAVBAR                 - Fixed header, mobile off-canvas menu.
+     HERO                   - Full-viewport hero with particles,
+                              orbs, badge, title, stats, scroll.
+     SERVICES               - Card grid with glow and tilt.
+     ABOUT                  - Two-column bio with floating cards.
+     CONTACT                - Form with floating labels and info
+                              cards.
+     FOOTER                 - Three-column footer and credits.
+     TOAST                  - Bottom-center notification popup.
+     RESPONSIVE FINE-TUNING - Breakpoint-specific overrides.
+     SPECIAL EFFECTS        - Keyframes, direction variants,
+                              noise texture, page-load fade.
+
+   (c) 2026 BryTech Solutions -- bryanalejandroprog17@gmail.com
    ============================================================ */
 
 /* ---- CSS Custom Properties ---- */

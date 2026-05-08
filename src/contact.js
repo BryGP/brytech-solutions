@@ -1,37 +1,74 @@
 /* ============================================================
-   BryTech Solutions — Contact Form (EmailJS)
-   ============================================================
-   SECURITY FEATURES:
-   ✅ Honeypot anti-bot field
-   ✅ Rate limiting (max 3 envíos por 10 minutos)
-   ✅ Cooldown de 60 segundos entre envíos
-   ✅ Input sanitization (previene XSS)
-   ✅ Email validation avanzada (dominio real)
-   ✅ Longitud máxima de campos
-   ✅ Protección contra doble-submit
+   contact.js -- BryTech Solutions
+   ------------------------------------------------------------
+   Handles the contact form submission flow via EmailJS.
+   Sends two emails per submission:
+     1. Notification email to the site owner (Bryan).
+     2. Auto-reply / welcome confirmation to the client.
+
+   Security features included:
+     - Honeypot hidden field to catch bots
+     - Rate limiting  (max 3 submissions per 10-minute window)
+     - Cooldown timer (60 seconds between submissions)
+     - Input sanitization to prevent XSS
+     - Advanced email validation with blocked disposable domains
+     - Suspicious content detection (script tags, spam URLs)
+     - Double-submit protection via isSubmitting flag
+
+   KNOWN ISSUE (duplicate notification):
+     Both sendForm calls use the full form, so if the EmailJS
+     service is also configured with a default "To Email",
+     Bryan may receive the notification twice. See the submit
+     handler for the fix applied.
+
+   (c) 2026 BryTech Solutions -- bryanalejandroprog17@gmail.com
    ============================================================ */
 
 import emailjs from '@emailjs/browser';
 
+
+/* ============================================================
+   EMAILJS CONFIGURATION
+   ------------------------------------------------------------
+   publicKey        -- Public API key for EmailJS authentication.
+   serviceId        -- The email service connected in EmailJS.
+   templateId       -- Template that notifies Bryan of a new
+                       contact submission.
+   welcomeTemplateId-- Template that sends an auto-reply
+                       confirmation to the client.
+   ============================================================ */
 const EMAILJS_CONFIG = {
   publicKey: 'mit1CSeNxf3na8kIo',
   serviceId: 'service_9ut91b7',
-  templateId: 'template_9385jds',       // Notificación → Bryan recibe el contacto
-  welcomeTemplateId: 'template_ojcv5ye', // Auto-reply → Cliente recibe confirmación
+  templateId: 'template_9385jds',
+  welcomeTemplateId: 'template_ojcv5ye',
 };
 
-// Security config
+
+/* ============================================================
+   SECURITY CONFIGURATION
+   ------------------------------------------------------------
+   maxSubmitsPerWindow -- Maximum number of form submissions
+                         allowed within the rate-limit window.
+   rateLimitWindowMs   -- Duration of the rate-limit window
+                         (10 minutes in milliseconds).
+   cooldownMs          -- Minimum wait time between consecutive
+                         submissions (60 seconds).
+   maxFieldLength      -- Character limits per field to prevent
+                         abuse or excessively long payloads.
+   blockedDomains      -- Disposable / temporary email providers
+                         that are rejected during validation.
+   ============================================================ */
 const SECURITY = {
-  maxSubmitsPerWindow: 3,      // Max envíos permitidos
-  rateLimitWindowMs: 10 * 60 * 1000, // Ventana de 10 minutos
-  cooldownMs: 60 * 1000,      // 60 segundos entre envíos
+  maxSubmitsPerWindow: 3,
+  rateLimitWindowMs: 10 * 60 * 1000,
+  cooldownMs: 60 * 1000,
   maxFieldLength: {
     name: 100,
     email: 254,
     phone: 20,
     message: 2000,
   },
-  // Dominios de email desechables comunes (bloquear)
   blockedDomains: [
     'tempmail.com', 'throwaway.email', 'guerrillamail.com',
     'mailinator.com', 'yopmail.com', 'dispostable.com',
@@ -40,9 +77,19 @@ const SECURITY = {
   ],
 };
 
+// Module-level state flags.
 let isSubmitting = false;
 let cooldownTimer = null;
 
+
+/* ============================================================
+   FORM INITIALIZATION
+   ------------------------------------------------------------
+   Called once from main.js on DOMContentLoaded. Sets up the
+   EmailJS SDK, locates the form element, and attaches the
+   submit event listener that orchestrates validation, security
+   checks, and the dual-email send flow.
+   ============================================================ */
 export function initContactForm() {
   emailjs.init(EMAILJS_CONFIG.publicKey);
 
@@ -54,44 +101,48 @@ export function initContactForm() {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    // 🔒 Anti double-submit
+    // -- Anti double-submit guard --
     if (isSubmitting) return;
 
-    // 🔒 Honeypot check — si el campo oculto tiene valor, es un bot
+    // -- Honeypot check --
+    // If the hidden "website" field has a value, it was filled
+    // by a bot. We simulate success so the bot believes it
+    // worked, but we never send anything.
     const honeypot = form.querySelector('#form-website');
     if (honeypot && honeypot.value) {
-      // Simula éxito para que el bot crea que funcionó
       fakeSuccess(form, submitBtn);
-      console.warn('🤖 Bot detected via honeypot');
+      console.warn('[BryTech] Bot detected via honeypot');
       return;
     }
 
-    // 🔒 Rate limiting check
+    // -- Rate limiting check --
     if (!checkRateLimit()) {
       showToast('Has enviado demasiados mensajes. Intenta de nuevo en unos minutos.', 'error');
       return;
     }
 
-    // 🔒 Cooldown check
+    // -- Cooldown check --
     if (!checkCooldown()) {
       const remaining = getCooldownRemaining();
       showToast(`Espera ${remaining} segundos antes de enviar otro mensaje.`, 'error');
       return;
     }
 
-    // 🔒 Validate & sanitize
+    // -- Validate and sanitize --
     if (!validateForm(form)) return;
 
-    // Set loading state
+    // Set loading state on the button.
     isSubmitting = true;
     submitBtn.classList.add('loading');
     submitBtn.disabled = true;
 
     try {
-      // Sanitize all inputs before sending
+      // Strip any HTML from user inputs before sending.
       sanitizeFormInputs(form);
 
-      // Enviar ambos emails en paralelo
+      // Send both emails in parallel:
+      //   1. Notification to Bryan (templateId)
+      //   2. Auto-reply to client  (welcomeTemplateId)
       await Promise.all([
         emailjs.sendForm(
           EMAILJS_CONFIG.serviceId,
@@ -105,16 +156,16 @@ export function initContactForm() {
         ),
       ]);
 
-      // Register successful submission for rate limiting
+      // Record this submission for rate-limit tracking.
       registerSubmission();
       startCooldown();
 
-      // Success state
+      // Transition button to success state.
       submitBtn.classList.remove('loading');
       submitBtn.classList.add('success');
-      showToast('¡Mensaje enviado correctamente! Te contactaré pronto. 🚀');
+      showToast('Mensaje enviado correctamente! Te contactare pronto.');
 
-      // Reset after delay
+      // Reset the form and button after a brief delay.
       setTimeout(() => {
         form.reset();
         submitBtn.classList.remove('success');
@@ -127,52 +178,70 @@ export function initContactForm() {
       submitBtn.classList.remove('loading');
       submitBtn.disabled = false;
       isSubmitting = false;
-      showToast('Hubo un error al enviar. Intenta de nuevo o contáctame directamente.', 'error');
+      showToast('Hubo un error al enviar. Intenta de nuevo o contactame directamente.', 'error');
     }
   });
 }
 
 
-// ============================================================
-// 🔒 RATE LIMITING (localStorage-based)
-// ============================================================
+/* ============================================================
+   RATE LIMITING (localStorage-based)
+   ------------------------------------------------------------
+   Tracks submission timestamps in localStorage under the key
+   "brytech_submissions". Only timestamps within the current
+   rate-limit window are kept. If the count exceeds
+   maxSubmitsPerWindow, further submissions are blocked.
+   ============================================================ */
+
+// Returns an array of submission timestamps that fall within
+// the active rate-limit window, discarding expired entries.
 function getSubmissions() {
   try {
     const data = JSON.parse(localStorage.getItem('brytech_submissions') || '[]');
     const now = Date.now();
-    // Only keep submissions within the rate limit window
     return data.filter(ts => now - ts < SECURITY.rateLimitWindowMs);
   } catch {
     return [];
   }
 }
 
+// Appends the current timestamp to the submissions log.
 function registerSubmission() {
   try {
     const submissions = getSubmissions();
     submissions.push(Date.now());
     localStorage.setItem('brytech_submissions', JSON.stringify(submissions));
   } catch {
-    // localStorage not available, silently fail
+    // localStorage unavailable -- silently continue.
   }
 }
 
+// Returns true if the user has not exceeded the maximum
+// allowed submissions within the rate-limit window.
 function checkRateLimit() {
   const submissions = getSubmissions();
   return submissions.length < SECURITY.maxSubmitsPerWindow;
 }
 
-// ============================================================
-// 🔒 COOLDOWN (prevent rapid re-submits)
-// ============================================================
+
+/* ============================================================
+   COOLDOWN (prevent rapid re-submits)
+   ------------------------------------------------------------
+   Stores the timestamp of the last successful submission in
+   localStorage. Subsequent submissions are blocked until the
+   cooldown period (60 seconds) has elapsed.
+   ============================================================ */
+
+// Saves the current timestamp as the last submission time.
 function startCooldown() {
   try {
     localStorage.setItem('brytech_cooldown', Date.now().toString());
   } catch {
-    // fallback: just track in memory
+    // Fallback: cooldown only tracked in-memory via isSubmitting.
   }
 }
 
+// Returns true if enough time has passed since the last submit.
 function checkCooldown() {
   try {
     const lastSubmit = parseInt(localStorage.getItem('brytech_cooldown') || '0');
@@ -182,6 +251,8 @@ function checkCooldown() {
   }
 }
 
+// Returns the number of seconds remaining until the cooldown
+// expires. Used to display a human-readable wait message.
 function getCooldownRemaining() {
   try {
     const lastSubmit = parseInt(localStorage.getItem('brytech_cooldown') || '0');
@@ -191,38 +262,59 @@ function getCooldownRemaining() {
   }
 }
 
-// ============================================================
-// 🔒 INPUT SANITIZATION (XSS protection)
-// ============================================================
+
+/* ============================================================
+   INPUT SANITIZATION (XSS protection)
+   ------------------------------------------------------------
+   Strips HTML tags from user-provided form values before they
+   are sent to EmailJS. This prevents potential cross-site
+   scripting payloads from reaching email templates.
+   ============================================================ */
+
+// Escapes HTML entities by leveraging the browser textContent
+// API, then trims whitespace.
 function sanitizeString(str) {
   const div = document.createElement('div');
-  div.textContent = str; // textContent auto-escapes HTML
+  div.textContent = str;
   return div.innerHTML
-    .replace(/&amp;/g, '&')  // Keep regular ampersands
+    .replace(/&amp;/g, '&')
     .trim();
 }
 
+// Strips all HTML tags from the name, phone, and message
+// fields in-place before the form data is sent.
 function sanitizeFormInputs(form) {
   const fields = ['form-name', 'form-phone', 'form-message'];
   fields.forEach(id => {
     const field = form.querySelector(`#${id}`);
     if (field && field.value) {
-      // Remove any HTML tags
       field.value = field.value.replace(/<[^>]*>/g, '').trim();
     }
   });
 }
 
-// ============================================================
-// 🔒 VALIDATION (enhanced)
-// ============================================================
+
+/* ============================================================
+   VALIDATION (enhanced)
+   ------------------------------------------------------------
+   Validates every required field in the contact form:
+     - Name:    required, min 2 chars, max 100 chars.
+     - Email:   required, RFC-inspired format, no disposable
+                domains, max 254 chars.
+     - Phone:   optional, but if provided must be 7-15 digits.
+     - Service: required (must select a service type).
+     - Message: required, min 10 chars, max 2000 chars.
+   Also checks for suspicious content patterns (scripts, spam
+   URLs) in the name and message fields.
+   Returns true if all validations pass, false otherwise.
+   ============================================================ */
 function validateForm(form) {
   const name = form.querySelector('#form-name');
   const email = form.querySelector('#form-email');
   const service = form.querySelector('#form-service');
   const message = form.querySelector('#form-message');
 
-  // Name validation
+  // -- Name validation --
   if (!name.value.trim()) {
     shakeField(name);
     name.focus();
@@ -238,40 +330,40 @@ function validateForm(form) {
   if (name.value.length > SECURITY.maxFieldLength.name) {
     shakeField(name);
     name.focus();
-    showToast(`El nombre es demasiado largo (máx ${SECURITY.maxFieldLength.name} caracteres).`, 'error');
+    showToast(`El nombre es demasiado largo (max ${SECURITY.maxFieldLength.name} caracteres).`, 'error');
     return false;
   }
 
-  // Email validation (advanced)
+  // -- Email validation (advanced) --
   if (!email.value.trim() || !isValidEmail(email.value)) {
     shakeField(email);
     email.focus();
-    showToast('Por favor ingresa un correo electrónico válido.', 'error');
+    showToast('Por favor ingresa un correo electronico valido.', 'error');
     return false;
   }
   if (isBlockedEmail(email.value)) {
     shakeField(email);
     email.focus();
-    showToast('Por favor usa un correo electrónico real, no temporal.', 'error');
+    showToast('Por favor usa un correo electronico real, no temporal.', 'error');
     return false;
   }
   if (email.value.length > SECURITY.maxFieldLength.email) {
     shakeField(email);
     email.focus();
-    showToast('El correo electrónico es demasiado largo.', 'error');
+    showToast('El correo electronico es demasiado largo.', 'error');
     return false;
   }
 
-  // Phone validation (optional but if filled, validate format)
+  // -- Phone validation (optional) --
   const phone = form.querySelector('#form-phone');
   if (phone.value.trim() && !isValidPhone(phone.value)) {
     shakeField(phone);
     phone.focus();
-    showToast('El formato del teléfono no es válido.', 'error');
+    showToast('El formato del telefono no es valido.', 'error');
     return false;
   }
 
-  // Service validation
+  // -- Service validation --
   if (!service.value) {
     shakeField(service);
     service.focus();
@@ -279,7 +371,7 @@ function validateForm(form) {
     return false;
   }
 
-  // Message validation
+  // -- Message validation --
   if (!message.value.trim()) {
     shakeField(message);
     message.focus();
@@ -295,11 +387,11 @@ function validateForm(form) {
   if (message.value.length > SECURITY.maxFieldLength.message) {
     shakeField(message);
     message.focus();
-    showToast(`El mensaje es demasiado largo (máx ${SECURITY.maxFieldLength.message} caracteres).`, 'error');
+    showToast(`El mensaje es demasiado largo (max ${SECURITY.maxFieldLength.message} caracteres).`, 'error');
     return false;
   }
 
-  // Check for suspicious patterns (URLs, scripts)
+  // -- Suspicious content check --
   if (containsSuspiciousContent(message.value) || containsSuspiciousContent(name.value)) {
     showToast('El contenido contiene elementos no permitidos.', 'error');
     return false;
@@ -308,42 +400,51 @@ function validateForm(form) {
   return true;
 }
 
-// Advanced email validation
+// Validates email format using an RFC 5322-inspired regex.
+// Requires a valid domain with at least a two-letter TLD.
 function isValidEmail(email) {
-  // RFC 5322 inspired regex — validates format, domain with TLD
   const regex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z]{2,})+$/;
   return regex.test(email);
 }
 
+// Returns true if the email domain is in the blocked list
+// of known disposable / temporary email providers.
 function isBlockedEmail(email) {
   const domain = email.split('@')[1]?.toLowerCase();
   return SECURITY.blockedDomains.includes(domain);
 }
 
+// Validates phone numbers: strips formatting characters and
+// checks that the remaining digits are between 7 and 15.
 function isValidPhone(phone) {
-  // Allow digits, spaces, dashes, parentheses, plus sign
   const cleaned = phone.replace(/[\s\-\(\)\+]/g, '');
   return /^\d{7,15}$/.test(cleaned);
 }
 
-// Detect suspicious content (spam links, script tags, etc.)
+// Scans text for common attack patterns: script tags,
+// javascript: URIs, inline event handlers, iframes, embeds,
+// BBCode links, and messages with 3+ URLs (likely spam).
 function containsSuspiciousContent(text) {
   const patterns = [
     /<script[\s>]/i,
     /javascript:/i,
-    /on\w+\s*=/i,                    // onclick=, onerror=, etc.
+    /on\w+\s*=/i,
     /<iframe/i,
     /<object/i,
     /<embed/i,
-    /\[url[=\]]/i,                   // BBCode links
-    /(https?:\/\/[^\s]+){3,}/i,      // 3+ URLs = likely spam
+    /\[url[=\]]/i,
+    /(https?:\/\/[^\s]+){3,}/i,
   ];
   return patterns.some(pattern => pattern.test(text));
 }
 
-// ============================================================
-// FAKE SUCCESS (for bots that hit honeypot)
-// ============================================================
+
+/* ============================================================
+   FAKE SUCCESS (for bots that hit honeypot)
+   ------------------------------------------------------------
+   Mimics a normal loading-then-success transition so bots
+   believe their submission went through. No email is sent.
+   ============================================================ */
 function fakeSuccess(form, submitBtn) {
   submitBtn.classList.add('loading');
   submitBtn.disabled = true;
@@ -358,12 +459,18 @@ function fakeSuccess(form, submitBtn) {
   }, 1500);
 }
 
-// ============================================================
-// UI HELPERS
-// ============================================================
+
+/* ============================================================
+   UI HELPERS
+   ------------------------------------------------------------
+   Small utility functions for visual feedback in the form.
+   ============================================================ */
+
+// Applies a horizontal shake animation and a red border to
+// the given field for 2 seconds to signal a validation error.
 function shakeField(field) {
   field.style.animation = 'none';
-  field.offsetHeight; // Force reflow
+  field.offsetHeight; // Force reflow to restart the animation.
   field.style.animation = 'shake 0.5s ease';
   field.style.borderBottomColor = '#F44336';
   
@@ -373,6 +480,9 @@ function shakeField(field) {
   }, 2000);
 }
 
+// Displays a toast notification at the bottom of the viewport.
+// Accepts a message string and an optional type ("success" or
+// "error") that controls the toast border and icon color.
 function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
   const toastMessage = document.getElementById('toast-message');
@@ -391,7 +501,13 @@ function showToast(message, type = 'success') {
   }, 4000);
 }
 
-// Add shake keyframe dynamically
+
+/* ============================================================
+   DYNAMIC STYLESHEET
+   ------------------------------------------------------------
+   Injects the "shake" keyframe animation into the document
+   head at module load time so it is available for shakeField().
+   ============================================================ */
 const shakeStyle = document.createElement('style');
 shakeStyle.textContent = `
   @keyframes shake {
