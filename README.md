@@ -1,45 +1,56 @@
-# BryTech Solutions 🚀
+# BryTech Solutions
 
-Sitio web oficial de **BryTech Solutions**, servicios profesionales de soporte técnico y soluciones IT en Querétaro.
+Official website for BryTech Solutions — professional IT support and technology services based in Querétaro, Mexico.
 
-Esta plataforma sirve como catálogo de servicios, tarjeta de presentación digital y punto de contacto principal para clientes locales que buscan soluciones tecnológicas de alto rendimiento.
+## Overview
 
-## 🌟 Características
+This project serves as the main digital presence for BryTech Solutions: a service catalog, digital business card, and primary point of contact for local clients seeking reliable technology solutions.
 
-* **Diseño Moderno:** Interfaz con estética "Cyber Tech", *glassmorphism* y experiencias visuales inmersivas.
-* **Optimización Total:** Arquitectura ligera diseñada para una carga ultrarrápida en móviles y escritorio.
-* **Comunicación Segura:** Sistema de contacto profesional con protocolos integrados de seguridad y filtrado de datos.
-* **Experiencia de Usuario:** Animaciones dinámicas y navegación fluida basada en estándares modernos de UX.
+## Tech Stack
 
-## 🛠️ Stack Tecnológico
+| Layer | Technology |
+|-------|-----------|
+| Core | HTML5, CSS3, JavaScript (ES6+) |
+| Build | Vite |
+| Email | EmailJS |
+| Deployment | Vercel |
 
-* **Core:** HTML5, CSS3, JavaScript (ES6+).
-* **Build Tool:** Vite.
-* **Infraestructura:** Desplegado y optimizado para Vercel.
+## Development
 
-## 🚀 Instalación y Desarrollo
+**Requirements:** Node.js 18+
 
-Para ejecutar el entorno de desarrollo localmente:
+```bash
+# Clone the repository
+git clone https://github.com/BryGP/brytech-solutions.git
+cd brytech-solutions
 
-1.  **Clona el repositorio**
-    ```bash
-    git clone [https://github.com/BryGP/brytech-solutions.git](https://github.com/BryGP/brytech-solutions.git)
-    cd brytech-solutions
-    ```
+# Install dependencies
+npm install
 
-2.  **Instala las dependencias**
-    ```bash
-    npm install
-    ```
+# Start development server
+npm run dev
 
-3.  **Inicia el servidor**
-    ```bash
-    npm run dev
-    ```
+# Build for production
+npm run build
+```
 
-## 🎨 Personalización
+## Project Structure
 
-El proyecto está estructurado mediante variables globales y componentes modulares, permitiendo un mantenimiento ágil del catálogo de servicios y la identidad visual de la marca.
+```
+brytech-solutions/
+├── index.html        # Main page (single-page layout)
+├── src/
+│   ├── style.css     # Global styles and design system
+│   ├── main.js       # UI interactions and animations
+│   ├── contact.js    # Contact form logic (EmailJS)
+│   └── particles.js  # Hero particle canvas
+└── public/           # Static assets
+```
+
+## Deployment
+
+The project is configured for automatic deployment on Vercel. Any push to `main` triggers a production build.
 
 ---
-✒️ Desarrollado por [BryGP](https://github.com/BryGP) — *Soluciones IT con visión de futuro.*
+
+Developed by [Bryan Alejandro Gonzalez Peñaloza](https://github.com/BryGP)
