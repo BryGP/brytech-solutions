@@ -83,6 +83,38 @@ let cooldownTimer = null;
 
 
 /* ============================================================
+   DEVICE FINGERPRINT (lightweight)
+   ------------------------------------------------------------
+   Generates a short, non-identifying hash based on publicly
+   available browser properties. Used only to make the
+   localStorage key unpredictable so it cannot be trivially
+   removed by someone who knows the key name.
+   No personal data is stored or transmitted.
+   ============================================================ */
+function getStorageKey(suffix) {
+  const raw = [
+    navigator.language,
+    screen.width,
+    screen.height,
+    screen.colorDepth,
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+  ].join('|');
+
+  // Simple djb2-style hash → 8-char hex string.
+  let hash = 5381;
+  for (let i = 0; i < raw.length; i++) {
+    hash = ((hash << 5) + hash) ^ raw.charCodeAt(i);
+  }
+  const key = (hash >>> 0).toString(16).padStart(8, '0');
+  return `bt_${key}_${suffix}`;
+}
+
+// Storage keys derived from the device fingerprint.
+const KEY_SUBMISSIONS = getStorageKey('s');
+const KEY_COOLDOWN    = getStorageKey('c');
+const KEY_SESSION     = 'bt_session_guard';
+
+/* ============================================================
    FORM INITIALIZATION
    ------------------------------------------------------------
    Called once from main.js on DOMContentLoaded. Sets up the
@@ -197,7 +229,7 @@ export function initContactForm() {
 // the active rate-limit window, discarding expired entries.
 function getSubmissions() {
   try {
-    const data = JSON.parse(localStorage.getItem('brytech_submissions') || '[]');
+    const data = JSON.parse(localStorage.getItem(KEY_SUBMISSIONS) || '[]');
     const now = Date.now();
     return data.filter(ts => now - ts < SECURITY.rateLimitWindowMs);
   } catch {
@@ -210,17 +242,33 @@ function registerSubmission() {
   try {
     const submissions = getSubmissions();
     submissions.push(Date.now());
-    localStorage.setItem('brytech_submissions', JSON.stringify(submissions));
+    localStorage.setItem(KEY_SUBMISSIONS, JSON.stringify(submissions));
+    // Session layer: increment session counter.
+    const sessionCount = parseInt(sessionStorage.getItem(KEY_SESSION) || '0');
+    sessionStorage.setItem(KEY_SESSION, sessionCount + 1);
   } catch {
-    // localStorage unavailable -- silently continue.
+    // Storage unavailable -- silently continue.
   }
 }
 
-// Returns true if the user has not exceeded the maximum
-// allowed submissions within the rate-limit window.
+// Returns true if BOTH the localStorage window AND the session
+// counter allow another submission.
 function checkRateLimit() {
-  const submissions = getSubmissions();
-  return submissions.length < SECURITY.maxSubmitsPerWindow;
+  try {
+    // Layer 1: localStorage window (survives tab close)
+    const submissions = getSubmissions();
+    if (submissions.length >= SECURITY.maxSubmitsPerWindow) return false;
+
+    // Layer 2: sessionStorage counter (cleared on tab close)
+    // Allows max 2x the window limit per session to prevent
+    // abuse via repeated localStorage clearing.
+    const sessionCount = parseInt(sessionStorage.getItem(KEY_SESSION) || '0');
+    if (sessionCount >= SECURITY.maxSubmitsPerWindow * 2) return false;
+
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 
@@ -235,7 +283,7 @@ function checkRateLimit() {
 // Saves the current timestamp as the last submission time.
 function startCooldown() {
   try {
-    localStorage.setItem('brytech_cooldown', Date.now().toString());
+    localStorage.setItem(KEY_COOLDOWN, Date.now().toString());
   } catch {
     // Fallback: cooldown only tracked in-memory via isSubmitting.
   }
@@ -244,7 +292,7 @@ function startCooldown() {
 // Returns true if enough time has passed since the last submit.
 function checkCooldown() {
   try {
-    const lastSubmit = parseInt(localStorage.getItem('brytech_cooldown') || '0');
+    const lastSubmit = parseInt(localStorage.getItem(KEY_COOLDOWN) || '0');
     return Date.now() - lastSubmit >= SECURITY.cooldownMs;
   } catch {
     return true;
@@ -252,10 +300,10 @@ function checkCooldown() {
 }
 
 // Returns the number of seconds remaining until the cooldown
-// expires. Used to display a human-readable wait message.
+// expires.
 function getCooldownRemaining() {
   try {
-    const lastSubmit = parseInt(localStorage.getItem('brytech_cooldown') || '0');
+    const lastSubmit = parseInt(localStorage.getItem(KEY_COOLDOWN) || '0');
     return Math.ceil((SECURITY.cooldownMs - (Date.now() - lastSubmit)) / 1000);
   } catch {
     return 60;
