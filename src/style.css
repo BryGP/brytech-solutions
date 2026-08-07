@@ -561,9 +561,10 @@ img {
 .hero-description {
   font-size: 1.05rem;
   color: var(--text-secondary);
-  max-width: 560px;
+  max-width: 620px;
   margin: 0 auto 2.5rem;
-  line-height: 1.8;
+  line-height: 1.7;
+  text-wrap: balance;
 }
 
 .hero-ctas {
