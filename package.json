@@ -1,10 +1,11 @@
 {
   "name": "brytech-solutions",
-  "version": "1.0.0",
-  "description": "Sitio web profesional de BryTech Solutions - Soporte técnico y servicios IT",
+  "version": "2.0.0",
+  "description": "Sitio web profesional de BryTech Solutions - Ingeniería en Sistemas, Infraestructura TI y Desarrollo de Software",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "vercel dev",
     "build": "vite build",
     "preview": "vite preview"
   },
