@@ -1,0 +1,295 @@
+================================================================================
+  DOCUMENTACIÓN TÉCNICA — BryTech Solutions Backend
+  Paso 4: Chatbot IA — POST /api/chat (OpenAI + Pricing Engine)
+  Fecha: 2026-08-18
+  Autor: Bryan Gonzalez / Asistente IA
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. OBJETIVO DEL PASO
+────────────────────────────────────────────────────────────────────────────────
+
+Integrar un LLM (Large Language Model) de OpenAI para recibir descripciones
+de proyectos en lenguaje natural y convertirlas automáticamente en la
+estructura de datos que el Pricing Engine ya sabe calcular.
+
+El cliente escribe:
+  "Necesito un sistema para mi taller donde registre clientes, vehículos y
+   servicios. Mis empleados deben entrar con usuario y contraseña."
+
+El sistema responde:
+  {
+    "interpretation": {
+      "projectType": "web_system",
+      "features":    ["authentication", "roles_permissions", "database", "crud"],
+      "complexity":  "medium",
+      "summary":     "Sistema web de gestión de taller mecánico...",
+      "missingInformation": ["Reportes?", "¿Acceso desde celular?", ...]
+    },
+    "estimate": {
+      "estimatedMin": 37200,
+      "estimatedMax": 99400,
+      "currency":     "MXN",
+      ...
+    }
+  }
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. REGLA ARQUITECTÓNICA FUNDAMENTAL
+────────────────────────────────────────────────────────────────────────────────
+
+  OpenAI interpreta texto → convierte a estructura de requerimientos
+       ↓
+  Backend valida la estructura (projectType catalogado, features válidas)
+       ↓
+  Pricing Engine calcula el estimado (con HOURLY_RATE interno)
+       ↓
+  Frontend recibe respuesta combinada (interpretación + estimado)
+
+  LO QUE OPENAI NUNCA HACE:
+  - Ver la tarifa interna ($350 MXN/hr).
+  - Inventar un precio directamente.
+  - Decidir el costo del proyecto.
+  - Ver el factor de riesgo ni la fórmula.
+
+  Por qué esta separación importa:
+  Los LLMs son impredecibles para cálculos numéricos. Si dejamos que OpenAI
+  "adivine" el precio, podría decir $5,000 cuando el correcto es $35,000.
+  Al separar la interpretación del cálculo, el precio siempre viene de la
+  fórmula determinista del Pricing Engine, no de una alucinación del modelo.
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. ESPECIFICACIÓN HTTP
+────────────────────────────────────────────────────────────────────────────────
+
+  Método:   POST
+  Endpoint: /api/chat
+  Headers:  Content-Type: application/json
+  Body:
+    {
+      "message": string    ← descripción del proyecto en lenguaje natural
+                             mínimo 10 caracteres, máximo 2000
+    }
+
+  Status codes:
+    200 OK                  — interpretación + estimado generados correctamente
+    400 Bad Request         — message faltante, muy corto o muy largo
+    405 Method Not Allowed  — método HTTP incorrecto (solo POST)
+    503 Service Unavailable — OPENAI_API_KEY no configurada en el servidor
+    502 Bad Gateway         — OpenAI devolvió una respuesta inválida
+    500 Internal Error      — error inesperado del servidor
+
+  Response (200):
+    {
+      "interpretation": {
+        "projectType":        string,     ← tipo de proyecto identificado
+        "features":           string[],   ← características requeridas
+        "complexity":         string,     ← nivel de complejidad
+        "summary":            string,     ← resumen en 1 oración
+        "missingInformation": string[]    ← aspectos no mencionados
+      },
+      "estimate": {
+        "estimatedMin":         number,
+        "estimatedMax":         number,
+        "currency":             "MXN",
+        "estimatedHoursMin":    number,
+        "estimatedHoursMax":    number,
+        "requiresManualReview": true,
+        "unknownFeatures":      string[]
+      }
+    }
+
+  Response (503 — sin API key):
+    {
+      "error": "OPENAI_API_KEY no está configurada en las variables de entorno.",
+      "hint":  "Agrega OPENAI_API_KEY en Vercel Dashboard → Project Settings → Env Vars."
+    }
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. CÓMO FUNCIONA INTERNAMENTE api/chat.js
+────────────────────────────────────────────────────────────────────────────────
+
+  Paso 1 — Validar el input del usuario
+    - Verifica que message exista y sea string.
+    - Verifica longitud mínima (10 chars) y máxima (2000 chars).
+    - Verifica que OPENAI_API_KEY esté en process.env.
+
+  Paso 2 — Construir el system prompt (buildSystemPrompt)
+    - Llama a getCatalog() del Pricing Engine para obtener los valores válidos.
+    - Inyecta projectTypes, features y complexities dentro del prompt.
+    - Efecto: si se agregan nuevos tipos al catálogo, el prompt se actualiza
+      automáticamente sin tocar api/chat.js.
+    - Instrucción clave: "responde ÚNICAMENTE con JSON puro, sin markdown."
+    - Instrucción clave: "NO inventes precios ni menciones costos."
+    - response_format: { type: 'json_object' } — fuerza JSON válido en OpenAI.
+
+  Paso 3 — Llamar a OpenAI (callOpenAI)
+    - Endpoint: POST https://api.openai.com/v1/chat/completions
+    - Modelo: gpt-4o-mini (más económico, suficiente para extracción de JSON)
+    - temperature: 0.2 (baja para respuestas consistentes y deterministas)
+    - max_tokens: 500 (suficiente para el JSON de respuesta)
+    - Bearer Token en el header Authorization.
+
+  Paso 4 — Validar la respuesta de OpenAI (validateInterpretation)
+    - Verifica que projectType sea uno de los del catálogo.
+    - Si complexity no es válida, fallback a "medium".
+    - Filtra features que OpenAI "inventó" fuera del catálogo.
+    - Si projectType es inválido, devuelve 502 (error del proveedor externo).
+
+  Paso 5 — Llamar al Pricing Engine
+    - calculateQuote({ projectType, features, complexity })
+    - La tarifa y la fórmula son internas. OpenAI nunca las vio.
+
+  Paso 6 — Combinar y responder
+    - Devuelve { interpretation, estimate } en un solo JSON al frontend.
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. EL SYSTEM PROMPT — DISEÑO Y DECISIONES
+────────────────────────────────────────────────────────────────────────────────
+
+  El system prompt es la "constitución" del modelo para esta tarea.
+  Está construido dinámicamente por buildSystemPrompt() en api/chat.js.
+
+  Estructura del prompt:
+    1. Definición del rol: "Eres el asistente de análisis de requerimientos..."
+    2. Instrucciones obligatorias (responder solo JSON, no inventar precios)
+    3. Valores válidos (inyectados del catálogo)
+    4. Definición de cada nivel de complejidad
+    5. Qué incluir en missingInformation
+    6. Formato exacto de respuesta
+
+  Por qué response_format: { type: 'json_object' }:
+    - OpenAI garantiza que la respuesta sea JSON parseble.
+    - Evita que el modelo envuelva el JSON en bloques ```json```.
+    - Solo disponible en gpt-4o-mini, gpt-4o y gpt-4-turbo.
+
+  Por qué temperature: 0.2:
+    - Alta temperatura (0.8-1.0) = respuestas creativas, impredecibles.
+    - Baja temperatura (0.0-0.3) = respuestas deterministas y consistentes.
+    - Para extracción de entidades (convertir texto a JSON), queremos
+      consistencia sobre creatividad.
+
+  Por qué gpt-4o-mini y no gpt-3.5-turbo:
+    - gpt-4o-mini soporta response_format json_object.
+    - Mejor comprensión del español y de contexto técnico.
+    - Costo muy bajo (~$0.15 USD por millón de tokens de entrada).
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. CONCEPTOS NUEVOS APRENDIDOS EN ESTE PASO
+────────────────────────────────────────────────────────────────────────────────
+
+  Bearer Token:
+    La autenticación con APIs externas (como OpenAI) se hace enviando una
+    clave en el header HTTP Authorization con el prefijo "Bearer":
+      Authorization: Bearer sk-proj-...
+    Esto le dice al servidor de OpenAI "soy Bryan, con esta clave".
+    La clave NUNCA va en el body ni en la URL.
+
+  Variables de entorno (process.env):
+    El servidor lee OPENAI_API_KEY de process.env, no del código fuente.
+    En local: se agrega en .env.local (ignorado por git).
+    En producción: se configura en el dashboard de Vercel.
+    Regla: si la clave aparece en el código fuente, es un error de seguridad.
+
+  LLM como extractor de entidades:
+    Los LLMs no solo generan texto libre. Con el prompt correcto pueden
+    actuar como extractores de entidades estructuradas desde texto no-estructurado.
+    Esto es lo que hacemos: extraer { projectType, features, complexity }
+    desde una descripción en lenguaje natural.
+
+  response_format json_object (OpenAI):
+    Parámetro que le indica a OpenAI que su respuesta DEBE ser JSON válido.
+    Evita el problema de tener que parsear markdown o texto envuelto en bloques.
+
+  Manejo de alucinaciones:
+    Los LLMs pueden inventar valores que no están en el catálogo.
+    La función validateInterpretation() actúa como filtro entre OpenAI y el
+    Pricing Engine, eliminando features o projectTypes inválidos.
+    Esto protege el sistema de errores causados por alucinaciones del modelo.
+
+  Error 502 Bad Gateway vs 500 Internal Server Error:
+    502: el servidor recibió la petición, la retransmitió a un servicio externo
+         (OpenAI), y ese servicio devolvió una respuesta inválida o no disponible.
+    500: error interno del propio servidor, no causado por un servicio externo.
+    En este caso: si OpenAI devuelve un projectType inválido, es 502.
+    Si hay un error de programación en chat.js, es 500.
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. CÓMO CONFIGURAR LA API KEY DE OPENAI
+────────────────────────────────────────────────────────────────────────────────
+
+  En local (para desarrollo):
+    1. Abrir el archivo .env.local en la raíz del proyecto.
+    2. Agregar la línea:
+         OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxx
+    3. Guardar y reiniciar el servidor: npm run dev:full
+    4. El archivo .env.local está en .gitignore → NUNCA se sube a git.
+
+  En producción (Vercel):
+    1. Ir a https://vercel.com/dashboard
+    2. Seleccionar el proyecto brytech-solutions
+    3. Project Settings → Environment Variables
+    4. Agregar variable: OPENAI_API_KEY = sk-proj-xxx
+    5. Marcar para los entornos: Production, Preview, Development
+    6. Hacer Redeploy para que tome efecto
+
+  Dónde obtener la API key:
+    1. Crear cuenta en https://platform.openai.com
+    2. Billing → Add payment method (OpenAI cobra por uso, es muy barato)
+    3. API Keys → Create new secret key
+    4. Copiar la clave (solo se muestra una vez)
+
+  Costo estimado de uso:
+    gpt-4o-mini: ~$0.15 USD por millón de tokens de entrada
+    Cada llamada de /api/chat usa ~400-600 tokens (prompt + respuesta)
+    Costo por cotización: ~$0.0001 USD (menos de 1 centavo)
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. RESULTADOS DEL TEST MOCK (SIN API KEY)
+────────────────────────────────────────────────────────────────────────────────
+
+  Script:   tests/test-chat.js
+  Comando:  node tests/test-chat.js  (modo mock automático sin API key)
+
+  Caso 1 — Taller mecánico
+    Entrada: "Necesito un sistema para mi taller donde registre clientes..."
+    OpenAI simula: web_system + [authentication, roles_permissions, database, crud]
+    Estimado: $37,200 – $99,400 MXN  |  88 – 237 hrs
+
+  Caso 2 — Despacho de abogados
+    Entrada: "Quiero una página para mi despacho de abogados..."
+    OpenAI simula: landing_page + [email_service], complexity: simple
+    Estimado: $5,100 – $10,100 MXN  |  12 – 24 hrs
+
+  Caso 3 — Tienda en línea + chatbot IA
+    Entrada: "Quiero una tienda en línea para vender ropa con chatbot..."
+    OpenAI simula: ecommerce + [database, crud, payment_gateway, file_upload, search, ai_chatbot]
+    Estimado: $77,200 – $185,700 MXN  |  184 – 442 hrs
+
+
+────────────────────────────────────────────────────────────────────────────────
+9. ARCHIVOS DEL PASO 4
+────────────────────────────────────────────────────────────────────────────────
+
+  api/chat.js           [MODIFICADO]
+    Refactorizado completamente.
+    Implementa: validación de input, system prompt dinámico, llamada a OpenAI,
+    validación de respuesta de OpenAI, cálculo con Pricing Engine.
+
+  tests/test-chat.js    [NUEVO]
+    Script de prueba con dos modos:
+    - Mock: simula respuestas de OpenAI para demostrar el flujo sin API key.
+    - Real: hace peticiones reales al endpoint POST /api/chat.
+    Auto-detecta cuál modo usar según la API key.
+
+================================================================================
+  FIN DEL DOCUMENTO — PASO 4
+================================================================================
