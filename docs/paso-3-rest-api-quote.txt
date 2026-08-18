@@ -1,0 +1,255 @@
+================================================================================
+  DOCUMENTACIÓN TÉCNICA — BryTech Solutions Backend
+  Paso 3: REST API de Cotización — POST /api/quote
+  Fecha: 2026-08-18
+  Autor: Bryan Gonzalez / Asistente IA
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. OBJETIVO DEL PASO
+────────────────────────────────────────────────────────────────────────────────
+
+Demostrar y documentar el flujo HTTP completo de la REST API de cotización.
+Después de construir el Pricing Engine (Paso 2), el Paso 3 valida que todo
+el ciclo de vida de una petición REST funciona correctamente:
+
+  Frontend
+     ↓   (HTTP POST con JSON)
+  POST /api/quote
+     ↓   (validación de input)
+  Backend (quote.js)
+     ↓   (cálculo interno)
+  Pricing Engine (pricing.js)
+     ↓   (JSON con estimado)
+  Frontend (muestra rango al usuario)
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. ESPECIFICACIÓN COMPLETA DE LOS ENDPOINTS
+────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────
+  GET /api/quote
+────────────────────────────────
+  Propósito:      Obtener el catálogo de opciones disponibles (sin precios).
+                  El frontend usa esto para construir formularios dinámicamente.
+
+  HTTP Method:    GET
+  Endpoint:       /api/quote
+  Headers:        Ninguno requerido
+  Request body:   Ninguno
+
+  Procesamiento backend:
+    quote.js detecta req.method === 'GET'
+    Llama a getCatalog() de pricing.js
+    getCatalog() devuelve solo los keys de PROJECT_BASE_HOURS y FEATURE_HOURS
+
+  Status codes:
+    200 OK         — catálogo devuelto correctamente
+    405            — método HTTP incorrecto
+
+  Response (200):
+    {
+      "projectTypes":  ["landing_page", "corporate_site", "web_system", ...],
+      "features":      ["authentication", "database", "reports", ...],
+      "complexities":  ["simple", "medium", "complex"]
+    }
+
+  Lo que NO incluye la respuesta (por diseño):
+    - Horas estimadas por tipo de proyecto
+    - Tarifa interna ($350 MXN/hr)
+    - Factor de riesgo
+
+
+────────────────────────────────
+  POST /api/quote
+────────────────────────────────
+  Propósito:      Calcular el estimado de precio para un proyecto específico.
+
+  HTTP Method:    POST
+  Endpoint:       /api/quote
+  Headers:        Content-Type: application/json
+  Request body:
+    {
+      "projectType": string,    ← REQUERIDO. Tipo de proyecto del catálogo.
+      "features":    string[],  ← OPCIONAL. Default: []. Features adicionales.
+      "complexity":  string     ← OPCIONAL. Default: "medium".
+                                  Valores: "simple" | "medium" | "complex"
+    }
+
+  Procesamiento backend:
+    1. quote.js recibe la petición
+    2. Valida que projectType esté presente y sea string
+    3. Valida que features sea un array
+    4. Valida que complexity sea uno de los tres valores válidos
+    5. Llama a calculateQuote({ projectType, features, complexity })
+    6. calculateQuote() ejecuta la fórmula del Pricing Engine:
+         horas = baseHours + featureHours
+         horas *= complexityMultiplier
+         costo = horas * HOURLY_RATE * (1 + RISK_FACTOR)
+         min   = redondear(costo * 0.90)
+         max   = redondear(costo * 1.15)   [o directamente costo según versión]
+    7. Retorna el resultado como JSON
+
+  Status codes:
+    200 OK         — estimado calculado correctamente
+    400 Bad Request — input inválido (projectType faltante, tipo no reconocido,
+                      complexity inválida, features no es array)
+    405 Method Not Allowed — método HTTP incorrecto (solo GET y POST)
+    500 Internal Server Error — error inesperado del servidor
+
+  Response (200):
+    {
+      "estimatedMin":         number,    ← precio mínimo en MXN
+      "estimatedMax":         number,    ← precio máximo en MXN
+      "currency":             "MXN",
+      "estimatedHoursMin":    number,    ← horas mínimas estimadas
+      "estimatedHoursMax":    number,    ← horas máximas estimadas
+      "requiresManualReview": true,      ← siempre true
+      "unknownFeatures":      string[]   ← features no catalogadas (para debug)
+    }
+
+  Response (400 — projectType inválido):
+    {
+      "error": "Tipo de proyecto no reconocido: \"red_social\". Tipos disponibles: ..."
+    }
+
+  Response (405):
+    {
+      "error": "Método PUT no permitido. Usa GET o POST."
+    }
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. RESULTADOS DE LOS TESTS
+────────────────────────────────────────────────────────────────────────────────
+
+Script de prueba: tests/test-quote.js
+Comando:          node tests/test-quote.js
+Requisito:        npm run dev:full corriendo en http://localhost:3000
+
+  Test 1 — GET /api/quote (catálogo)
+    Status: 200 OK ✓
+    Devuelve 9 projectTypes, 29 features, 3 complexities
+
+  Test 2 — Landing page simple + email_service
+    Status: 200 OK ✓
+    estimatedMin: $5,100 MXN  |  estimatedMax: $10,100 MXN
+    estimatedHours: 12 – 24 hrs
+
+  Test 3 — Sistema web + auth + BD + reportes (medium)
+    Status: 200 OK ✓
+    estimatedMin: $35,000 MXN  |  estimatedMax: $96,100 MXN
+    estimatedHours: 83 – 229 hrs
+
+  Test 4 — Sistema web complejo + IA + WhatsApp + 10 features (complex)
+    Status: 200 OK ✓
+    estimatedMin: $80,000 MXN  |  estimatedMax: $203,500 MXN
+    estimatedHours: 190 – 485 hrs
+
+  Test 5 — projectType inválido ("red_social")
+    Status: 400 Bad Request ✓
+    Error descriptivo con lista de tipos válidos
+
+  Test 6 — Feature no catalogada ("blockchain_nft", "metaverso")
+    Status: 200 OK ✓  (no falla, las ignora en el cálculo)
+    unknownFeatures: ["blockchain_nft", "metaverso"]
+    El precio se calcula solo con las features reconocidas
+
+  Test 7 — Método PUT (incorrecto)
+    Status: 405 Method Not Allowed ✓
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. CONCEPTOS HTTP DEMOSTRADOS EN ESTE PASO
+────────────────────────────────────────────────────────────────────────────────
+
+HTTP Methods:
+  GET   — Lectura de recursos. Sin body. Idempotente (misma respuesta siempre).
+  POST  — Envío de datos para procesamiento. Con body JSON. No idempotente.
+  PUT   — Actualización. No soportado aquí (405).
+
+Headers relevantes:
+  Content-Type: application/json
+    Indica al servidor que el body de la petición es JSON.
+    El servidor lo usa para hacer JSON.parse() del body automáticamente.
+    Si se omite, el body puede llegar como string sin parsear.
+
+Status codes usados:
+  200 OK               — Petición exitosa. Se devuelve el recurso solicitado.
+  400 Bad Request      — El cliente envió datos incorrectos o faltantes.
+  405 Method Not Allowed — El método HTTP no está soportado en ese endpoint.
+  500 Internal Server Error — Error del servidor (no del cliente).
+
+REST vs RPC:
+  Esta API sigue convenciones REST ligeras:
+  - GET  para leer (catálogo)
+  - POST para calcular (acción con body)
+  - Errores con status codes semánticos
+  - Respuestas en JSON
+
+  Una alternativa RPC hubiera sido siempre usar POST con un campo "action".
+  REST es más estándar y compatible con herramientas como Postman, fetch, curl.
+
+JSON como contrato:
+  El shape (estructura) del request body y del response es el "contrato" entre
+  el frontend y el backend. Si el backend cambia los nombres de los campos,
+  el frontend debe actualizarse. Por eso es importante documentar el contrato
+  (como hace esta documentación).
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. ARCHIVOS DEL PASO 3
+────────────────────────────────────────────────────────────────────────────────
+
+  tests/test-quote.js   [NUEVO]
+    Script Node.js que ejecuta 7 casos de prueba contra el endpoint /api/quote.
+    Muestra en consola todos los detalles HTTP de cada petición y respuesta.
+    No usa ningún framework de testing — usa fetch nativo de Node.js 18+.
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. CÓMO USAR EL ENDPOINT DESDE EL FRONTEND
+────────────────────────────────────────────────────────────────────────────────
+
+Desde JavaScript (navegador o Node.js):
+
+  // 1. Obtener catálogo de opciones
+  const catalogRes = await fetch('/api/quote');
+  const catalog = await catalogRes.json();
+  // catalog.projectTypes, catalog.features, catalog.complexities
+
+  // 2. Solicitar cotización
+  const quoteRes = await fetch('/api/quote', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      projectType: 'web_system',
+      features:    ['authentication', 'database'],
+      complexity:  'medium',
+    }),
+  });
+  const quote = await quoteRes.json();
+  // quote.estimatedMin, quote.estimatedMax, quote.currency
+  // quote.estimatedHoursMin, quote.estimatedHoursMax
+  // quote.requiresManualReview → siempre true
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. PRÓXIMOS PASOS
+────────────────────────────────────────────────────────────────────────────────
+
+  Paso 4 — POST /api/chat
+    OpenAI interpreta el texto libre del usuario ("necesito un sistema para mi
+    taller...") y lo convierte en una estructura { projectType, features, complexity }.
+    El backend valida esa estructura y la pasa al Pricing Engine.
+    Nunca: OpenAI inventa un precio directamente.
+
+  Paso 5 — Webhook de WhatsApp (simulado)
+    Preparar /api/webhook-whatsapp.js con un payload JSON simulado.
+    Entender el flujo event-driven antes de conectarlo con Meta.
+
+================================================================================
+  FIN DEL DOCUMENTO — PASO 3
+================================================================================

@@ -1,0 +1,201 @@
+================================================================================
+  DOCUMENTACIÓN TÉCNICA — BryTech Solutions Backend
+  Paso 2: Pricing Engine (Motor Interno de Cotización)
+  Fecha: 2026-08-18
+  Autor: Bryan Gonzalez / Asistente IA
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. OBJETIVO DEL PASO
+────────────────────────────────────────────────────────────────────────────────
+
+Construir la lógica de precios del backend que permita cotizar proyectos de
+forma consistente y controlada.
+
+La regla fundamental:
+  - La lógica de precios pertenece al BACKEND. Nunca al frontend.
+  - El cliente siempre recibe un RANGO, no un precio fijo.
+  - La cotización definitiva requiere aprobación manual de Bryan.
+
+Flujo de cotización:
+
+  Necesidad del cliente
+        ↓
+  Características requeridas (features)
+        ↓
+  Pricing Engine (api/lib/pricing.js)
+        ↓
+  Estimación interna (horas × tarifa × complejidad × riesgo)
+        ↓
+  Revisión manual de Bryan
+        ↓
+  Cotización definitiva al cliente
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. ARCHIVOS CREADOS / MODIFICADOS
+────────────────────────────────────────────────────────────────────────────────
+
+api/lib/pricing.js  [NUEVO]
+  Módulo del motor de cotización. Contiene:
+  - HOURLY_RATE: tarifa interna ($350 MXN/hr). NUNCA se expone al frontend.
+  - RISK_FACTOR: contingencia del 20% sobre el costo total.
+  - PROJECT_BASE_HOURS: horas base por tipo de proyecto (9 tipos).
+  - FEATURE_HOURS: horas adicionales por característica (29 features).
+  - COMPLEXITY_MULTIPLIERS: factores por nivel de complejidad.
+  - calculateQuote(): función principal que calcula el estimado.
+  - getCatalog(): devuelve solo los identificadores válidos, sin precios.
+
+api/quote.js  [MODIFICADO]
+  Refactorizado para delegar el cálculo al Pricing Engine.
+  Antes: contenía un catálogo estático con precios en texto plano.
+  Ahora: valida el input y llama a calculateQuote() de pricing.js.
+  Agrega soporte para GET /api/quote (devuelve catálogo sin precios).
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. FÓRMULA DE COTIZACIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+  totalHours  = baseHours(projectType) + sum(featureHours(features))
+  totalHours *= complexityMultiplier(complexity)
+  baseCost    = totalHours * HOURLY_RATE
+  withRisk    = baseCost * (1 + RISK_FACTOR)
+  estimatedMin = ceil(withRisk * 0.90 / 100) * 100   ← redondeo a centenas
+  estimatedMax = ceil(withRisk * 1.15 / 100) * 100   ← no implementado aún*
+
+  *Nota: la versión actual usa withRisk directamente como estimatedMin y
+  estimatedMax, redondeando al alza. Una próxima iteración puede afinar
+  el rango con factores de variación más precisos.
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. CATÁLOGO DE TIPOS DE PROYECTO
+────────────────────────────────────────────────────────────────────────────────
+
+  Tipo              Horas mínimas   Horas máximas   Descripción
+  ─────────────     ─────────────   ─────────────   ──────────────────────────
+  landing_page          8               16          Página de aterrizaje
+  corporate_site       20               40          Sitio corporativo (5-8 páginas)
+  web_system           40              120          Sistema web con lógica de negocio
+  api_rest             16               40          API REST standalone
+  ecommerce            60              150          Tienda en línea
+  automation           12               35          Automatización / bots
+  data_dashboard       25               60          Dashboard con visualizaciones
+  consulting            2                8          Asesoría (por sesión)
+  maintenance           4               12          Mantenimiento mensual
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. CATÁLOGO DE FEATURES (horas adicionales)
+────────────────────────────────────────────────────────────────────────────────
+
+  CATEGORÍA               Feature               Min hrs   Max hrs
+  ─────────────────────   ──────────────────    ───────   ───────
+  Acceso y usuarios       authentication           8         16
+                          roles_permissions        6         14
+                          social_login             4          8
+                          two_factor_auth          6         10
+
+  Base de datos           database                 8         20
+                          crud                     6         12
+                          migrations               3          6
+                          audit_log                4          8
+
+  Reportes                reports                  8         20
+                          dashboard               10         24
+                          data_export              4          8
+
+  Integraciones           api_integration         10         20
+                          payment_gateway         12         24
+                          whatsapp                 8         16
+                          email_service            4          8
+                          maps                     4         10
+
+  Inteligencia Artificial ai_chatbot              12         30
+                          ai_classification       16         35
+                          ai_generation           10         25
+
+  Infraestructura         deployment               4          8
+                          hosting_setup            2          5
+                          ssl_domain               1          2
+                          docker                   6         12
+
+  Funcionalidades         notifications            4          8
+                          calendar_booking         8         18
+                          file_upload              4         10
+                          search                   6         14
+                          multi_language           8         16
+                          rate_limiting            2          4
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. MULTIPLICADORES DE COMPLEJIDAD
+────────────────────────────────────────────────────────────────────────────────
+
+  simple   × 1.0   Proyecto pequeño, requisitos claros, cliente disponible.
+  medium   × 1.3   Integraciones moderadas, algo de incertidumbre en scope.
+  complex  × 1.7   Múltiples sistemas, alta personalización, arquitectura exigente.
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. EJEMPLOS DE COTIZACIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+Ejemplo A — Landing page simple con email
+  Input:
+    projectType: "landing_page"
+    features:    ["email_service"]
+    complexity:  "simple"
+  Cálculo:
+    baseHours = [8, 16]
+    + email_service [4, 8]
+    = [12, 24] horas
+    × 1.0 (simple)
+    × $350/hr
+    × 1.20 (riesgo)
+    = $5,040 – $10,080 → redondeado: $5,100 – $10,100 MXN
+
+Ejemplo B — Sistema web con auth, BD y reportes (medium)
+  Input:
+    projectType: "web_system"
+    features:    ["authentication", "database", "reports"]
+    complexity:  "medium"
+  Cálculo:
+    baseHours = [40, 120]
+    + authentication [8, 16]
+    + database [8, 20]
+    + reports [8, 20]
+    = [64, 176] horas
+    × 1.3 (medium) = [83, 229] horas
+    × $350/hr = $29,050 – $80,150
+    × 1.20 (riesgo) = $34,860 – $96,180
+    → redondeado: $35,000 – $96,100 MXN
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. DECISIONES DE DISEÑO
+────────────────────────────────────────────────────────────────────────────────
+
+Por qué api/lib/ y no directamente en quote.js:
+  - Separación de responsabilidades: quote.js = orquestación HTTP,
+    pricing.js = lógica de negocio.
+  - Reutilizable: en el futuro, chat.js puede llamar a calculateQuote()
+    para estimar el precio basado en lo que interpreta OpenAI.
+  - Testeable: pricing.js es una función pura que puede probarse de forma
+    aislada sin necesidad de levantar un servidor HTTP.
+
+Por qué getCatalog() no incluye precios:
+  - El frontend necesita saber qué opciones existen para construir formularios.
+  - El frontend NO necesita saber cuántas horas tiene cada feature ni la tarifa.
+  - Separar el catálogo del cálculo permite actualizar tarifas sin cambiar la UI.
+
+Por qué requiresManualReview es siempre true:
+  - Un estimado automático puede estar desviado ±20% del precio real.
+  - Los proyectos de desarrollo tienen mucha variabilidad (comunicación, cambios).
+  - El cliente recibe un rango orientativo; Bryan revisa y cotiza definitivamente.
+
+================================================================================
+  FIN DEL DOCUMENTO — PASO 2
+================================================================================
