@@ -36,19 +36,14 @@ export default defineConfig({
 
   // Development server settings.
   server: {
-    port: 3000,           // Local dev server port.
+    // When running `npm run dev` directly: defaults to port 3000.
+    // When running `npm run dev:full` (vercel dev): vercel injects a PORT env
+    // variable so Vite starts on an internal port (e.g. 3001) and vercel dev
+    // itself acts as the outer server on port 3000, routing /api/* to functions.
+    port: parseInt(process.env.PORT) || 3000,
     open: true,           // Auto-open browser on "npm run dev".
-
-    // Proxy /api/* to Vercel dev server (port 3000 when using vercel dev).
-    // This allows frontend-only `npm run dev` to still reach API functions
-    // if `vercel dev` is running in a separate terminal on the same port.
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-        // Note: When using `npm run dev:full` (vercel dev), this proxy
-        // is not needed because Vercel dev handles both frontend and API.
-      },
-    },
+    // NOTE: No proxy for /api here. When running the full stack, use
+    // `npm run dev:full` (vercel dev), which handles /api/* routing at
+    // the outer Vercel layer before requests reach Vite.
   },
 });

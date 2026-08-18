@@ -1,0 +1,242 @@
+================================================================================
+  DOCUMENTACIÓN TÉCNICA — BryTech Solutions Backend
+  Paso 1: Health Endpoint + Configuración Full-Stack Local (vercel dev)
+  Fecha: 2026-08-17
+  Autor: Bryan Gonzalez / Asistente IA
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. OBJETIVO DEL PASO
+────────────────────────────────────────────────────────────────────────────────
+
+Validar que la tubería completa de backend funciona correctamente antes de
+construir cualquier lógica de negocio compleja:
+
+    Navegador → vercel dev (servidor externo) → api/health.js → JSON response
+
+El endpoint GET /api/health es el "Hello World" del backend propio. Si responde
+correctamente, confirma que:
+  - Vercel Serverless Functions están configuradas y accesibles.
+  - El enrutamiento de /api/* funciona correctamente en local.
+  - El frontend (Vite) coexiste correctamente con el backend en el mismo puerto.
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. ARCHIVO CREADO
+────────────────────────────────────────────────────────────────────────────────
+
+api/health.js
+  - Vercel Serverless Function.
+  - Responde solo a GET. Devuelve 405 para cualquier otro método HTTP.
+  - No requiere ninguna variable de entorno.
+  - Response exitosa (200):
+      {
+        "status": "ok",
+        "service": "brytech-api",
+        "version": "2.0.0",
+        "timestamp": "2026-08-17T22:57:35.243Z"
+      }
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. CONCEPTO: CÓMO VERCEL CONVIERTE UN ARCHIVO EN ENDPOINT
+────────────────────────────────────────────────────────────────────────────────
+
+Vercel detecta automáticamente cualquier archivo .js dentro de la carpeta api/
+y lo convierte en una Serverless Function. La ruta del archivo determina la URL
+del endpoint de forma directa:
+
+    api/health.js            →  /api/health
+    api/quote.js             →  /api/quote
+    api/chat.js              →  /api/chat
+    api/webhook/whatsapp.js  →  /api/webhook/whatsapp
+
+Cada archivo debe exportar una función default con la siguiente firma:
+
+    export default function handler(req, res) {
+      // req = objeto con method, body, headers, query
+      // res = objeto para construir la respuesta HTTP
+    }
+
+Esta firma es idéntica a la de Express.js, pero sin instanciar un servidor.
+Vercel levanta la función por petición y la destruye al terminar.
+
+En producción (Vercel), estas funciones se ejecutan como Lambda Functions en la
+infraestructura de AWS. En desarrollo local, vercel dev simula ese comportamiento.
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. PROBLEMAS ENCONTRADOS Y SOLUCIONES
+────────────────────────────────────────────────────────────────────────────────
+
+PROBLEMA 1 — Vercel CLI no instalada
+──────────────────────────────────────
+  Síntoma:  'vercel' is not recognized as an internal or external command.
+  Causa:    La CLI de Vercel no estaba instalada globalmente.
+  Solución: npm install -g vercel
+
+PROBLEMA 2 — Necesidad de autenticación en Vercel CLI
+───────────────────────────────────────────────────────
+  Síntoma:  No existing credentials found. Starting login flow...
+  Causa:    Primera vez que se usa la CLI en este equipo.
+  Solución: Visitar la URL proporcionada por la CLI para autenticarse con la
+            cuenta de Vercel vía dispositivo OAuth.
+  URL usada: https://vercel.com/oauth/device?user_code=CTCX-FHRN
+
+PROBLEMA 3 — Proyecto no vinculado correctamente
+─────────────────────────────────────────────────
+  Síntoma:  vercel dev --yes creó un nuevo proyecto en lugar de usar el existente.
+  Causa:    El flag --yes aceptó automáticamente la creación de un proyecto nuevo
+            y falló al intentar conectarlo con GitHub por permisos insuficientes.
+  Solución: Ejecutar vercel link --yes para vincular el directorio local al
+            proyecto existente en Vercel Cloud.
+  Cuenta vinculada: brygp / brygps-projects/brytech-solutions
+
+PROBLEMA 4 — yarn no instalado
+────────────────────────────────
+  Síntoma:  'yarn' is not recognized as an internal or external command.
+  Causa:    vercel dev usa yarn por defecto para el build inicial aunque el
+            proyecto usa npm. Esto es un comportamiento conocido del CLI.
+  Solución: npm install -g yarn (instala yarn 1.22.22)
+
+PROBLEMA 5 — Vite manejando /api/* en lugar de vercel dev
+───────────────────────────────────────────────────────────
+  Síntoma:  GET /api/health devuelve el contenido del archivo api/health.js como
+            texto/JavaScript estático (status 200 pero cuerpo incorrecto) o
+            un error 500 con cuerpo vacío.
+  Causa raíz: Tres sub-problemas combinados:
+    a) vercel.json no tenía "devCommand", por lo que vercel dev no sabía cómo
+       separar el servidor frontend del servidor de funciones.
+    b) vite.config.js tenía un proxy configurado para /api/ → localhost:3001,
+       interceptando las peticiones antes de que llegaran a vercel dev.
+    c) El puerto de Vite estaba hardcodeado en 3000, impidiendo que vercel dev
+       pudiera actuar como servidor externo en ese mismo puerto.
+  Soluciones aplicadas:
+    a) Agregar "devCommand": "vite" en vercel.json, indicándole a vercel dev
+       cómo iniciar el servidor interno de Vite.
+    b) Eliminar el bloque proxy de vite.config.js. No es necesario porque
+       vercel dev intercepta /api/* antes de que lleguen a Vite.
+    c) Cambiar el puerto de Vite de estático a dinámico:
+           port: parseInt(process.env.PORT) || 3000
+       Vercel dev inyecta automáticamente la variable PORT al proceso de Vite,
+       haciendo que Vite use un puerto interno. vercel dev queda libre para
+       escuchar en el puerto 3000 como servidor externo.
+
+CÓMO FUNCIONA CORRECTAMENTE:
+  vercel dev --listen 3000
+      ├── Inyecta PORT=XXXX al proceso de Vite
+      ├── Vite inicia en localhost:XXXX (puerto interno)
+      └── vercel dev escucha en localhost:3000 como proxy externo
+              ├── GET /api/health → ejecuta api/health.js → JSON response
+              └── GET /          → proxy a Vite en :XXXX → index.html
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. ARCHIVOS MODIFICADOS Y POR QUÉ
+────────────────────────────────────────────────────────────────────────────────
+
+vercel.json
+  Cambio 1: Agregar "devCommand": "vite"
+    Por qué: Sin devCommand, vercel dev no sabía qué comando usar para el
+    servidor de desarrollo del frontend. Al definirlo, vercel dev puede
+    iniciar Vite internamente y actuar como el servidor proxy externo.
+
+  Cambio 2: Corregir rewrites para excluir /api/* del redirect a index.html
+    Antes:  { "source": "/(.*)", "destination": "/index.html" }
+    Después:
+      { "source": "/api/(.*)", "destination": "/api/$1" },
+      { "source": "/((?!api/).*)", "destination": "/index.html" }
+    Por qué: La regla original era un catch-all que interceptaba TODAS las rutas
+    incluyendo /api/*, redirigiendo las peticiones de API al frontend en lugar
+    de a las Serverless Functions.
+
+  Cambio 3: Actualizar Content-Security-Policy (connect-src)
+    Agregado: https://api.openai.com https://graph.facebook.com
+    Por qué: Las futuras Serverless Functions llamarán a estas APIs externas.
+    Los headers de seguridad deben permitir esas conexiones.
+
+vite.config.js
+  Cambio 1: Eliminar el bloque proxy
+    Por qué: El proxy de Vite para /api/ → localhost:3001 interceptaba las
+    peticiones de API antes de que llegaran a vercel dev, causando errores
+    ECONNREFUSED porque nada escuchaba en el puerto 3001.
+
+  Cambio 2: Puerto dinámico
+    Antes:  port: 3000
+    Después: port: parseInt(process.env.PORT) || 3000
+    Por qué: Con el puerto hardcodeado, Vite ignoraba la variable PORT que
+    vercel dev inyecta y ambos procesos intentaban usar el puerto 3000 al mismo
+    tiempo.
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. CÓMO USAR EL ENTORNO DE DESARROLLO
+────────────────────────────────────────────────────────────────────────────────
+
+REQUISITOS PREVIOS (solo una vez):
+  npm install -g vercel      ← CLI de Vercel
+  npm install -g yarn        ← Yarn (requerido por vercel dev internamente)
+  vercel login               ← Autenticarse con la cuenta de Vercel
+  vercel link                ← Vincular el proyecto local con el proyecto en Vercel
+
+COMANDOS DE DESARROLLO:
+  Solo frontend (sin API):
+    npm run dev
+    → http://localhost:3000 (Vite directo, sin funciones backend)
+
+  Full-stack (frontend + API functions):
+    npm run dev:full    [alias de: vercel dev --listen 3000]
+    → http://localhost:3000 (vercel dev como proxy externo)
+    → /api/* funciona y ejecuta las Serverless Functions en local
+    → / y demás rutas van al frontend de Vite
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. CÓMO PROBAR EL ENDPOINT
+────────────────────────────────────────────────────────────────────────────────
+
+Con el servidor corriendo (npm run dev:full):
+
+  Desde el navegador:
+    http://localhost:3000/api/health
+
+  Con PowerShell:
+    Invoke-WebRequest -Uri "http://localhost:3000/api/health" -Method GET
+
+  Con curl (si está instalado):
+    curl http://localhost:3000/api/health
+
+  Respuesta esperada:
+    HTTP 200
+    {
+      "status": "ok",
+      "service": "brytech-api",
+      "version": "2.0.0",
+      "timestamp": "2026-08-17T22:57:35.243Z"
+    }
+
+  Probar método incorrecto (debe devolver 405):
+    Invoke-WebRequest -Uri "http://localhost:3000/api/health" -Method POST
+
+  En producción (cuando se haga push):
+    https://brygp-solutions.vercel.app/api/health
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. CONCEPTOS APRENDIDOS EN ESTE PASO
+────────────────────────────────────────────────────────────────────────────────
+
+  - Vercel Serverless Functions: archivos en api/ → endpoints automáticos.
+  - req y res: el patrón de Express.js funciona en Vercel Functions.
+  - HTTP status codes: 200 OK, 405 Method Not Allowed.
+  - vercel dev: servidor de desarrollo que simula el entorno de producción de
+    Vercel, ejecutando tanto el frontend como las Serverless Functions en local.
+  - Variables de entorno: vercel dev inyecta PORT al proceso hijo (Vite).
+  - Content-Security-Policy: qué dominios externos pueden ser contactados desde
+    el browser/servidor.
+  - Proxy en Vite: cuándo es útil y cuándo interfiere con otras herramientas.
+
+================================================================================
+  FIN DEL DOCUMENTO — PASO 1
+================================================================================
