@@ -96,7 +96,10 @@ INSTRUCCIONES OBLIGATORIAS
 7. NO agregues features solamente porque sean comunes, recomendables o útiles
    para ese tipo de proyecto.
 8. Si tienes duda sobre si una feature es necesaria, NO la agregues a "features".
-   En ese caso agrégala a "missingInformation" como información pendiente.
+   Si el usuario expresó explícitamente duda sobre esa funcionalidad,
+   agrégala a "undecidedFeatures".
+   Si simplemente falta información para saber si será necesaria,
+   describe la duda en "missingInformation".
 9. No confundas funcionalidades con detalles visuales. Por ejemplo,
    "moderna", "profesional" o "bonita" no implican nuevas features.
 10. La información faltante debe ser específica para el tipo de proyecto detectado.
@@ -138,6 +141,26 @@ COMPLEJIDAD (elige una):
 simple   — Proyecto pequeño, requisitos claros, cliente con buena disponibilidad.
 medium   — Integraciones moderadas, cierta incertidumbre en el scope.
 complex  — Múltiples sistemas interconectados, alta personalización, arquitectura exigente.
+
+════════════════════════════════════════
+INFORMACIÓN YA CONOCIDA
+════════════════════════════════════════
+Extrae hechos importantes que el usuario ya proporcionó en
+"knownInformation".
+
+NUNCA incluyas en missingInformation algo que el usuario
+ya haya informado.
+
+Ejemplo:
+
+Usuario:
+"Mi esposa y yo utilizaríamos el sistema."
+
+knownInformation:
+["Inicialmente aproximadamente 2 usuarios"]
+
+NO preguntar:
+"Número aproximado de usuarios".
 
 ════════════════════════════════════════
 INFORMACIÓN FALTANTE
@@ -182,15 +205,84 @@ automation:
 Si una pregunta no afecta el alcance del proyecto detectado,
 NO la agregues a missingInformation.
 
+Antes de agregar un elemento a "missingInformation", verifica que
+esa información NO esté ya presente en:
+- el mensaje del usuario
+- knownInformation
+- features
+- futureFeatures
+- undecidedFeatures
+
+════════════════════════════════════════
+ALCANCE DEL PROYECTO
+════════════════════════════════════════
+Debes distinguir entre tres categorías:
+
+1. ALCANCE ACTUAL
+Funcionalidades que el usuario solicita para la versión que quiere
+desarrollar ahora.
+→ Agrégalas a "features".
+
+2. FUNCIONALIDADES FUTURAS
+Funciones que el usuario menciona explícitamente como:
+"más adelante", "segunda etapa", "después", "en un futuro",
+"eventualmente", "posteriormente", etc.
+→ Agrégalas a "futureFeatures".
+→ NO las agregues a "features".
+→ NO preguntes detalles sobre ellas en missingInformation,
+salvo que sean necesarias para diseñar correctamente la versión actual.
+
+3. FUNCIONALIDADES INCIERTAS
+Funciones sobre las que el usuario expresa duda:
+"tal vez", "no sé si", "posiblemente", "habría que revisar",
+"quizá", etc.
+→ Agrégalas a "undecidedFeatures".
+→ NO las agregues a "features".
+
+4. INFORMACIÓN CONOCIDA
+Los datos concretos ya proporcionados por el usuario deben registrarse
+en "knownInformation".
+
+Ejemplos:
+- cantidad de usuarios
+- negocio o industria
+- dispositivos desde los que se utilizará
+- plazo mencionado
+- sistema actual
+- restricciones explícitas
+- funcionalidades expresamente descartadas
+
+NO conviertas toda la conversación en knownInformation.
+Incluye únicamente hechos que puedan ser útiles para continuar
+el levantamiento de requerimientos.
+
+5. REGLA DE NO DUPLICACIÓN
+Una misma feature NO puede aparecer simultáneamente en:
+- features
+- futureFeatures
+- undecidedFeatures
+
+Prioridad:
+- Si pertenece al alcance actual → features
+- Si fue indicada explícitamente para después → futureFeatures
+- Si el usuario expresó duda → undecidedFeatures
+
+Si el usuario dice explícitamente que NO necesita algo,
+NO lo incluyas en ninguna lista de funcionalidades.
+Conserva esa información únicamente como contexto conocido.
+
 ════════════════════════════════════════
 FORMATO DE RESPUESTA (JSON estricto)
 ════════════════════════════════════════
 {
   "projectType":        string,    ← uno de los tipos listados arriba
-  "features":           string[],  ← solo features del catálogo
+  "features":           string[],  ← funcionalidades del alcance ACTUAL, solo del catálogo
+  "futureFeatures":     string[],  ← funcionalidades FUTURAS, solo del catálogo
+  "undecidedFeatures":  string[],  ← funcionalidades INCIERTAS, solo del catálogo
+  "knownInformation":   string[],  ← hechos importantes que el usuario YA proporcionó
   "complexity":         string,    ← "simple" | "medium" | "complex"
-  "summary":            string,    ← máx 1 oración describiendo el proyecto
-  "missingInformation": string[]   ← aspectos no mencionados que afectan el scope
+  "summary":            string,    ← máx. 1 oración describiendo el alcance ACTUAL
+  "missingInformation": string[]   ← información faltante que afecta el alcance ACTUAL
 }
 `.trim();
 }
@@ -269,20 +361,55 @@ function validateInterpretation(interpretation) {
     interpretation.complexity = 'medium';
   }
 
-  // Filtrar features no catalogadas (no bloqueamos, solo limpiamos)
-  const originalFeatures = Array.isArray(interpretation.features) ? interpretation.features : [];
-  const validFeatures = originalFeatures.filter(f => catalog.features.includes(f));
-  const invalidFeatures = originalFeatures.filter(f => !catalog.features.includes(f));
+  // ── Features de alcance actual ─────────────────────────────
+  const originalFeatures = Array.isArray(interpretation.features)
+    ? interpretation.features
+    : [];
+
+  const validFeatures = originalFeatures.filter(
+    f => catalog.features.includes(f)
+  );
+
+  const invalidFeatures = originalFeatures.filter(
+    f => !catalog.features.includes(f)
+  );
+
+  // ── Features futuras ───────────────────────────────────────
+  const originalFutureFeatures = Array.isArray(interpretation.futureFeatures)
+    ? interpretation.futureFeatures
+    : [];
+
+  const validFutureFeatures = originalFutureFeatures
+    .filter(f => catalog.features.includes(f))
+    .filter(f => !validFeatures.includes(f));
+
+  // ── Features inciertas ─────────────────────────────────────
+  const originalUndecidedFeatures = Array.isArray(interpretation.undecidedFeatures)
+    ? interpretation.undecidedFeatures
+    : [];
+
+  const validUndecidedFeatures = originalUndecidedFeatures
+    .filter(f => catalog.features.includes(f))
+    .filter(f => !validFeatures.includes(f))
+    .filter(f => !validFutureFeatures.includes(f));
+
+  // ── Información conocida ───────────────────────────────────
+  const knownInformation = Array.isArray(interpretation.knownInformation)
+    ? interpretation.knownInformation
+    : [];
 
   const cleaned = {
     projectType: interpretation.projectType,
     features: validFeatures,
+    futureFeatures: validFutureFeatures,
+    undecidedFeatures: validUndecidedFeatures,
+    knownInformation: knownInformation,
     complexity: interpretation.complexity || 'medium',
     summary: interpretation.summary || '',
     missingInformation: Array.isArray(interpretation.missingInformation)
       ? interpretation.missingInformation
       : [],
-    _removedFeatures: invalidFeatures, // Features que OpenAI inventó
+    _removedFeatures: invalidFeatures,
   };
 
   return {
@@ -354,6 +481,9 @@ export default async function handler(req, res) {
       interpretation: {
         projectType: cleaned.projectType,
         features: cleaned.features,
+        futureFeatures: cleaned.futureFeatures,
+        undecidedFeatures: cleaned.undecidedFeatures,
+        knownInformation: cleaned.knownInformation,
         complexity: cleaned.complexity,
         summary: cleaned.summary,
         missingInformation: cleaned.missingInformation,
