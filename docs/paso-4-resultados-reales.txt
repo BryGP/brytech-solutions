@@ -1,0 +1,235 @@
+================================================================================
+  RESULTADOS DE TESTS REALES — POST /api/chat con OpenAI gpt-4o-mini
+  BryTech Solutions Backend v2.0.0
+  Fecha: 2026-08-18
+  Script: tests/test-chat.js (MODO REAL — con OPENAI_API_KEY configurada)
+  Modelo: gpt-4o-mini  |  temperature: 0.2  |  response_format: json_object
+================================================================================
+
+Estos resultados fueron obtenidos con peticiones reales a la API de OpenAI.
+El system prompt del backend le instruye al modelo responder SOLO con JSON
+estructurado, sin inventar precios ni features que el usuario no mencionó.
+
+Versión del system prompt: con reglas estrictas de features (v2 del prompt,
+mejorada manualmente por Bryan para ser más conservadora y específica).
+
+────────────────────────────────────────────────────────────────────────────────
+TEST 1 — Sistema de gestión de taller mecánico (MODO REAL)
+────────────────────────────────────────────────────────────────────────────────
+
+  HTTP Method:  POST
+  Endpoint:     http://localhost:3000/api/chat
+  Request body:
+    {
+      "message": "Necesito un sistema para mi taller mecánico donde pueda
+                  registrar clientes, vehículos y servicios. Mis empleados
+                  deben poder entrar con usuario y contraseña."
+    }
+
+  Status: 200 OK
+
+  Response:
+    {
+      "interpretation": {
+        "projectType": "web_system",
+        "features": ["authentication", "crud", "database"],
+        "complexity": "medium",
+        "summary": "Sistema para taller mecánico que permite registrar clientes,
+                    vehículos y servicios con acceso para empleados mediante
+                    usuario y contraseña.",
+        "missingInformation": [
+          "número aproximado de usuarios",
+          "roles y permisos específicos para empleados",
+          "módulos requeridos adicionales",
+          "reportes necesarios",
+          "integraciones externas",
+          "fecha o plazo de entrega"
+        ]
+      },
+      "estimate": {
+        "estimatedMin": 33900,
+        "estimatedMax": 91800,
+        "currency": "MXN",
+        "estimatedHoursMin": 81,
+        "estimatedHoursMax": 218,
+        "requiresManualReview": true,
+        "unknownFeatures": []
+      }
+    }
+
+  Análisis:
+    - OpenAI detectó correctamente web_system.
+    - Features: authentication, crud, database — solo las mencionadas.
+    - NO asumió roles_permissions (el usuario dijo "empleados con usuario
+      y contraseña" pero no especificó roles distintos). Lo dejó en
+      missingInformation como "roles y permisos específicos".
+    - Comportamiento correcto: conservador, no sobre-estima el alcance.
+
+
+────────────────────────────────────────────────────────────────────────────────
+TEST 2 — Landing page para despacho de abogados (MODO REAL)
+────────────────────────────────────────────────────────────────────────────────
+
+  HTTP Method:  POST
+  Endpoint:     http://localhost:3000/api/chat
+  Request body:
+    {
+      "message": "Quiero una página para mi despacho de abogados donde la
+                  gente pueda conocer mis servicios y contactarme fácilmente."
+    }
+
+  Status: 200 OK
+
+  Response:
+    {
+      "interpretation": {
+        "projectType": "landing_page",
+        "features": [],
+        "complexity": "simple",
+        "summary": "Página de presentación para un despacho de abogados con
+                    información sobre servicios y contacto.",
+        "missingInformation": [
+          "contenido o secciones requeridas",
+          "identidad gráfica disponible",
+          "dominio y hosting",
+          "fecha o plazo de entrega",
+          "mantenimiento posterior"
+        ]
+      },
+      "estimate": {
+        "estimatedMin": 3400,
+        "estimatedMax": 6800,
+        "currency": "MXN",
+        "estimatedHoursMin": 8,
+        "estimatedHoursMax": 16,
+        "requiresManualReview": true,
+        "unknownFeatures": []
+      }
+    }
+
+  Análisis:
+    - features: [] — El usuario solo dijo "conocer servicios y contactarme".
+    - NO asumió email_service ni contact_form porque el usuario dijo
+      "contactarme" de forma vaga, sin especificar un formulario.
+    - Resultado honesto y conservador. El precio más bajo ($3,400–$6,800 MXN)
+      refleja mejor el alcance real de lo que se describió.
+
+
+────────────────────────────────────────────────────────────────────────────────
+TEST 3 — Tienda en línea con chatbot IA (MODO REAL)
+────────────────────────────────────────────────────────────────────────────────
+
+  HTTP Method:  POST
+  Endpoint:     http://localhost:3000/api/chat
+  Request body:
+    {
+      "message": "Quiero una tienda en línea para vender ropa con catálogo,
+                  carrito, pago con tarjeta y un chatbot que ayude a los
+                  clientes."
+    }
+
+  Status: 200 OK
+
+  Response:
+    {
+      "interpretation": {
+        "projectType": "ecommerce",
+        "features": ["crud", "payment_gateway", "ai_chatbot"],
+        "complexity": "medium",
+        "summary": "Se desarrollará una tienda en línea para vender ropa con
+                    catálogo, carrito de compras y un chatbot para asistencia
+                    al cliente.",
+        "missingInformation": [
+          "cantidad aproximada de productos",
+          "métodos de envío",
+          "manejo de inventario",
+          "facturación",
+          "integraciones externas"
+        ]
+      },
+      "estimate": {
+        "estimatedMin": 49200,
+        "estimatedMax": 118000,
+        "currency": "MXN",
+        "estimatedHoursMin": 117,
+        "estimatedHoursMax": 281,
+        "requiresManualReview": true,
+        "unknownFeatures": []
+      }
+    }
+
+  Análisis:
+    - complexity: medium (no complex) — con el prompt mejorado OpenAI es
+      más conservador en la estimación de complejidad.
+    - features: crud, payment_gateway, ai_chatbot — solo las explícitamente
+      mencionadas (catálogo, carrito → crud; pago con tarjeta → payment_gateway;
+      chatbot → ai_chatbot).
+    - NO asumió database, file_upload, search ni otras features típicas
+      de un ecommerce que el usuario no mencionó.
+
+
+────────────────────────────────────────────────────────────────────────────────
+TEST 4 — Error 400: mensaje demasiado corto (MODO REAL)
+────────────────────────────────────────────────────────────────────────────────
+
+  Request body: { "message": "web" }
+  Status: 400 Bad Request
+  Response: { "error": "Describe tu proyecto con más detalle (mínimo 10 caracteres)." }
+  → Validación del backend antes de llamar a OpenAI. Correcto ✓
+
+
+────────────────────────────────────────────────────────────────────────────────
+TEST 5 — Error 400: mensaje faltante (MODO REAL)
+────────────────────────────────────────────────────────────────────────────────
+
+  Request body: {}
+  Status: 400 Bad Request
+  Response: { "error": "El campo \"message\" es requerido." }
+  → Validación del backend. Correcto ✓
+
+
+────────────────────────────────────────────────────────────────────────────────
+DIFERENCIAS ENTRE MOCK Y MODO REAL
+────────────────────────────────────────────────────────────────────────────────
+
+  El mock fue diseñado con el prompt inicial (v1). Los tests reales se
+  ejecutaron con el prompt mejorado (v2 — prompt más conservador de Bryan).
+
+  Caso: taller mecánico
+    Mock v1:  features [authentication, roles_permissions, database, crud]
+              estimado $37,200 – $99,400 MXN
+    Real v2:  features [authentication, crud, database]
+              estimado $33,900 – $91,800 MXN
+    → OpenAI dejó roles_permissions en missingInformation porque el
+      usuario no especificó roles distintos (solo "entrar con usuario
+      y contraseña"). Más preciso.
+
+  Caso: despacho de abogados
+    Mock v1:  features [email_service], estimado $5,100 – $10,100 MXN
+    Real v2:  features [], estimado $3,400 – $6,800 MXN
+    → El usuario dijo "contactarme" sin mencionar formulario ni email.
+      Con el prompt conservador, OpenAI no asume el feature.
+
+  Caso: tienda + chatbot
+    Mock v1:  complexity "complex", features 6, estimado $77,200 – $185,700 MXN
+    Real v2:  complexity "medium", features 3, estimado $49,200 – $118,000 MXN
+    → Con el prompt mejorado, OpenAI no sobre-estima la complejidad ni
+      añade features sin mención explícita del usuario.
+
+  CONCLUSIÓN:
+    El prompt mejorado hace que la IA sea más honesta: solo interpreta
+    lo que el usuario dijo, y deja el resto en missingInformation para
+    que Bryan complete la cotización definitiva manualmente.
+
+
+================================================================================
+  TAMBIÉN PROBADO CON POSTMAN (por Bryan — resultados adicionales)
+================================================================================
+
+  Bryan realizó pruebas adicionales con Postman. Todos los casos
+  pasaron correctamente. Los tests de Postman son equivalentes a los
+  del script tests/test-chat.js pero ejecutados desde una interfaz visual.
+
+================================================================================
+  FIN DEL DOCUMENTO — RESULTADOS REALES
+================================================================================

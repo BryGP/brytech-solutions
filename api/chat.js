@@ -89,16 +89,50 @@ INSTRUCCIONES OBLIGATORIAS
 3. NO inventes precios. NO menciones costos. Solo interpreta requerimientos.
 4. Si el usuario pregunta por precios, igual devuelve el JSON de requerimientos
    — el sistema calculará el estimado por separado.
+5. NO inventes funcionalidades que el usuario no haya solicitado.
+6. Agrega una feature únicamente cuando:
+   - el usuario la mencione explícitamente, o
+   - sea una consecuencia técnica directa e inevitable de lo solicitado.
+7. NO agregues features solamente porque sean comunes, recomendables o útiles
+   para ese tipo de proyecto.
+8. Si tienes duda sobre si una feature es necesaria, NO la agregues a "features".
+   En ese caso agrégala a "missingInformation" como información pendiente.
+9. No confundas funcionalidades con detalles visuales. Por ejemplo,
+   "moderna", "profesional" o "bonita" no implican nuevas features.
+10. La información faltante debe ser específica para el tipo de proyecto detectado.
+    No hagas preguntas genéricas que no tengan relación con el proyecto.
 
 ════════════════════════════════════════
 VALORES VÁLIDOS
 ════════════════════════════════════════
-
 TIPOS DE PROYECTO (elige exactamente uno):
 ${catalog.projectTypes.join(', ')}
 
 FEATURES disponibles (lista solo las que apliquen al proyecto):
 ${catalog.features.join(', ')}
+
+REGLAS DE INTERPRETACIÓN DE FEATURES:
+
+Ejemplo 1:
+Usuario: "Quiero un botón directo a WhatsApp."
+→ incluir "whatsapp" si existe en el catálogo.
+
+Ejemplo 2:
+Usuario: "Quiero que los clientes puedan subir fotografías o documentos."
+→ incluir "file_upload" si existe en el catálogo.
+
+Ejemplo 3:
+Usuario: "Quiero una landing page con formulario de contacto y WhatsApp."
+→ NO incluir file_upload, authentication, database, reports u otras features
+  que el usuario no haya solicitado.
+
+Ejemplo 4:
+Usuario: "Quiero un sistema donde empleados entren con usuario y contraseña."
+→ incluir authentication si existe en el catálogo.
+
+Ejemplo 5:
+Usuario: "Quiero una página moderna con animaciones."
+→ no asumir base de datos, usuarios, reportes, carga de archivos ni APIs.
 
 COMPLEJIDAD (elige una):
 simple   — Proyecto pequeño, requisitos claros, cliente con buena disponibilidad.
@@ -108,9 +142,45 @@ complex  — Múltiples sistemas interconectados, alta personalización, arquite
 ════════════════════════════════════════
 INFORMACIÓN FALTANTE
 ════════════════════════════════════════
-Lista los aspectos importantes que el usuario NO mencionó y que afectan el
-scope o el precio. Ejemplos: número de usuarios, reportes específicos,
-integraciones adicionales, plazos, mantenimiento posterior, acceso móvil.
+Lista únicamente información que el usuario NO mencionó y que sea relevante
+para definir correctamente el alcance del tipo de proyecto detectado.
+
+NO incluyas preguntas genéricas que no correspondan al proyecto.
+
+Ejemplos de información relevante según el tipo de proyecto:
+
+landing_page:
+- contenido o secciones requeridas
+- identidad gráfica disponible
+- dominio y hosting
+- fecha o plazo de entrega
+- mantenimiento posterior
+
+web_system:
+- número aproximado de usuarios
+- roles y permisos
+- módulos requeridos
+- reportes
+- integraciones externas
+- fecha o plazo de entrega
+
+ecommerce:
+- cantidad aproximada de productos
+- métodos de pago
+- métodos de envío
+- manejo de inventario
+- facturación
+- integraciones externas
+
+automation:
+- proceso actual que se desea automatizar
+- sistemas involucrados
+- frecuencia de ejecución
+- volumen aproximado de información
+- resultado esperado
+
+Si una pregunta no afecta el alcance del proyecto detectado,
+NO la agregues a missingInformation.
 
 ════════════════════════════════════════
 FORMATO DE RESPUESTA (JSON estricto)
@@ -139,16 +209,16 @@ async function callOpenAI(userMessage, apiKey) {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Content-Type':  'application/json',
+      'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model:       'gpt-4o-mini',
+      model: 'gpt-4o-mini',
       temperature: 0.2,           // Baja temperatura = respuestas más consistentes
-      max_tokens:  500,
+      max_tokens: 500,
       messages: [
         { role: 'system', content: buildSystemPrompt() },
-        { role: 'user',   content: userMessage },
+        { role: 'user', content: userMessage },
       ],
       // Forzar respuesta en JSON (disponible en gpt-4o-mini y gpt-4o)
       response_format: { type: 'json_object' },
@@ -160,7 +230,7 @@ async function callOpenAI(userMessage, apiKey) {
     throw new Error(`OpenAI API error ${response.status}: ${errBody?.error?.message ?? 'unknown'}`);
   }
 
-  const data    = await response.json();
+  const data = await response.json();
   const content = data.choices?.[0]?.message?.content ?? '';
 
   // Parsear el JSON devuelto por OpenAI.
@@ -183,7 +253,7 @@ async function callOpenAI(userMessage, apiKey) {
  */
 function validateInterpretation(interpretation) {
   const catalog = getCatalog();
-  const errors  = [];
+  const errors = [];
 
   // Validar projectType
   if (!interpretation.projectType) {
@@ -201,22 +271,22 @@ function validateInterpretation(interpretation) {
 
   // Filtrar features no catalogadas (no bloqueamos, solo limpiamos)
   const originalFeatures = Array.isArray(interpretation.features) ? interpretation.features : [];
-  const validFeatures    = originalFeatures.filter(f => catalog.features.includes(f));
-  const invalidFeatures  = originalFeatures.filter(f => !catalog.features.includes(f));
+  const validFeatures = originalFeatures.filter(f => catalog.features.includes(f));
+  const invalidFeatures = originalFeatures.filter(f => !catalog.features.includes(f));
 
   const cleaned = {
-    projectType:        interpretation.projectType,
-    features:           validFeatures,
-    complexity:         interpretation.complexity || 'medium',
-    summary:            interpretation.summary || '',
+    projectType: interpretation.projectType,
+    features: validFeatures,
+    complexity: interpretation.complexity || 'medium',
+    summary: interpretation.summary || '',
     missingInformation: Array.isArray(interpretation.missingInformation)
-                          ? interpretation.missingInformation
-                          : [],
-    _removedFeatures:   invalidFeatures, // Features que OpenAI inventó
+      ? interpretation.missingInformation
+      : [],
+    _removedFeatures: invalidFeatures, // Features que OpenAI inventó
   };
 
   return {
-    valid:   errors.length === 0,
+    valid: errors.length === 0,
     errors,
     cleaned,
   };
@@ -253,7 +323,7 @@ export default async function handler(req, res) {
   if (!OPENAI_API_KEY) {
     return res.status(503).json({
       error: 'OPENAI_API_KEY no está configurada en las variables de entorno.',
-      hint:  'Agrega OPENAI_API_KEY en Vercel Dashboard → Project Settings → Env Vars.',
+      hint: 'Agrega OPENAI_API_KEY en Vercel Dashboard → Project Settings → Env Vars.',
     });
   }
 
@@ -275,17 +345,17 @@ export default async function handler(req, res) {
     // ── Paso 3: Pricing Engine calcula el estimado ────────────
     const estimate = calculateQuote({
       projectType: cleaned.projectType,
-      features:    cleaned.features,
-      complexity:  cleaned.complexity,
+      features: cleaned.features,
+      complexity: cleaned.complexity,
     });
 
     // ── Paso 4: Respuesta combinada ───────────────────────────
     return res.status(200).json({
       interpretation: {
-        projectType:        cleaned.projectType,
-        features:           cleaned.features,
-        complexity:         cleaned.complexity,
-        summary:            cleaned.summary,
+        projectType: cleaned.projectType,
+        features: cleaned.features,
+        complexity: cleaned.complexity,
+        summary: cleaned.summary,
         missingInformation: cleaned.missingInformation,
       },
       estimate,
