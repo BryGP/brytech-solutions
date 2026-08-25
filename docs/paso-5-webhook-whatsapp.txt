@@ -1,0 +1,329 @@
+================================================================================
+  DOCUMENTACIÓN TÉCNICA — BryTech Solutions Backend
+  Paso 5: Webhook de WhatsApp Cloud API (Simulado)
+  Fecha: 2026-08-18 / 2026-08-25
+  Autor: Bryan Gonzalez / Asistente IA
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. OBJETIVO DEL PASO
+────────────────────────────────────────────────────────────────────────────────
+
+Construir y simular el webhook de WhatsApp Cloud API para entender el flujo
+event-driven antes de que Meta apruebe la cuenta de negocios.
+
+Un WEBHOOK es lo opuesto al polling:
+  Polling:  Tu servidor pregunta "¿hay mensajes?" cada X segundos → ineficiente
+  Webhook:  WhatsApp llama A TU servidor cuando llega un mensaje → event-driven
+
+Esto permite que el flujo completo sea:
+  Cliente escribe por WhatsApp
+        ↓
+  Meta hace POST a /api/webhook-whatsapp (tu servidor)
+        ↓
+  Webhook extrae el texto del payload
+        ↓
+  Llama internamente a /api/chat (OpenAI → Pricing Engine)
+        ↓
+  [TODO Paso 6+] Responde al cliente por WhatsApp Cloud API
+        ↓
+  Retorna 200 OK a Meta (obligatorio en < 5 segundos)
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. ARCHIVOS CREADOS / MODIFICADOS
+────────────────────────────────────────────────────────────────────────────────
+
+  api/webhook-whatsapp.js   [CREADO]
+    Serverless Function que maneja los dos tipos de requests de WhatsApp:
+    - GET  → verificación del webhook (handshake con Meta)
+    - POST → recepción de mensajes en tiempo real
+
+  tests/test-webhook-whatsapp.js   [CREADO]
+    Script con 6 casos de prueba usando payloads reales de WhatsApp.
+
+  api/chat.js   [MEJORADO por Bryan durante el Paso 5]
+    System prompt v3: categorización de alcance en 5 dimensiones.
+    (ver sección 7 de este documento)
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. LOS DOS TIPOS DE REQUEST DEL WEBHOOK
+────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────
+  GET /api/webhook-whatsapp  — Verificación (handshake)
+────────────────────────
+
+  Cuándo ocurre:
+    Una sola vez, cuando registras el URL del webhook en Meta Developer Console.
+    Meta necesita confirmar que el servidor es tuyo antes de enviarte eventos.
+
+  Cómo funciona:
+    Meta envía un GET con tres parámetros:
+      hub.mode         = "subscribe"
+      hub.verify_token = el token que configuraste en Meta (debe coincidir
+                         con tu WEBHOOK_VERIFY_TOKEN)
+      hub.challenge    = número aleatorio generado por Meta
+
+    Tu servidor debe:
+      1. Verificar que hub.verify_token === WEBHOOK_VERIFY_TOKEN
+      2. Si coincide → responder 200 con hub.challenge como texto plano
+      3. Si no coincide → responder 403
+
+    Meta recibe el challenge y confirma que el webhook es válido.
+
+  Ejemplo real:
+    GET /api/webhook-whatsapp
+      ?hub.mode=subscribe
+      &hub.verify_token=brytech_verify_2026
+      &hub.challenge=1158201444
+
+    Respuesta esperada: 200 + body = "1158201444"
+
+────────────────────────
+  POST /api/webhook-whatsapp  — Recepción de mensajes
+────────────────────────
+
+  Cuándo ocurre:
+    Cada vez que alguien te escribe por WhatsApp Business.
+
+  Estructura del payload (JSON de WhatsApp Cloud API):
+    {
+      "object": "whatsapp_business_account",
+      "entry": [{
+        "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+        "changes": [{
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "5214421234567",
+              "phone_number_id": "PHONE_NUMBER_ID"
+            },
+            "contacts": [{
+              "profile": { "name": "Carlos Ramírez" },
+              "wa_id": "5214421234567"
+            }],
+            "messages": [{
+              "from": "5214421234567",
+              "id": "wamid.HBgN...",
+              "timestamp": "1787088648",
+              "text": { "body": "Necesito un sistema para mi restaurante..." },
+              "type": "text"
+            }]
+          },
+          "field": "messages"
+        }]
+      }]
+    }
+
+  Nota: WhatsApp también envía payloads de STATUS UPDATE (delivered, read, sent).
+  Esos tienen "statuses" en lugar de "messages" y deben ignorarse.
+  Siempre se responde 200 OK aunque se ignore el evento.
+
+  REGLA CRÍTICA DE WHATSAPP:
+    Tu servidor DEBE responder 200 OK en menos de 5 segundos.
+    Si no responde, Meta reintentará el webhook hasta 20 veces.
+    Por eso, cualquier error interno también retorna 200 (no 500).
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. FLUJO INTERNO DEL WEBHOOK (POST)
+────────────────────────────────────────────────────────────────────────────────
+
+  1. Validar que body.object === 'whatsapp_business_account'
+     → Si no, ignorar con 200
+
+  2. Extraer el mensaje del payload con extractTextMessage()
+     → Navega la estructura anidada: entry[0].changes[0].value.messages[0]
+     → Si hay "statuses" en lugar de "messages" → ignorar con 200
+     → Si el tipo del mensaje no es "text" → ignorar con 200
+
+  3. Validar que el texto tenga contenido mínimo (≥ 5 chars)
+
+  4. Llamada interna a POST /api/chat (OpenAI + Pricing Engine)
+     → fetch(`${BASE_URL}/api/chat`, { message: texto })
+     → BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000'
+
+  5. Loguear el resultado en consola del servidor
+
+  6. [TODO] Responder al usuario por WhatsApp Cloud API
+     → Requiere WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN
+     → Se implementará cuando Meta apruebe la cuenta
+
+  7. Retornar 200 OK al webhook de Meta
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. VARIABLES DE ENTORNO
+────────────────────────────────────────────────────────────────────────────────
+
+  WEBHOOK_VERIFY_TOKEN
+    Token secreto compartido entre tu servidor y Meta Developer Console.
+    Valor libre (crea uno memorable pero no adivinable).
+    Ejemplo: "brytech_verify_2026"
+
+    Local:      Agregar en .env.local
+    Producción: Vercel Dashboard → Project Settings → Env Vars
+
+  BASE_URL
+    URL base del servidor para llamadas internas entre funciones.
+    Local:      No se necesita (default automático: http://localhost:3000)
+    Producción: Agregar BASE_URL=https://tu-proyecto.vercel.app
+
+  Pendientes (Paso 6+):
+    WHATSAPP_PHONE_NUMBER_ID  → ID del número de teléfono en Meta
+    WHATSAPP_ACCESS_TOKEN     → Token de acceso de la Meta App
+    WHATSAPP_APP_SECRET       → Para validar firma HMAC de los POSTs
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. RESULTADOS DE LOS TESTS
+────────────────────────────────────────────────────────────────────────────────
+
+  Script:   tests/test-webhook-whatsapp.js
+  Comando:  node tests/test-webhook-whatsapp.js
+
+  Test 1 — GET verificación (token correcto)
+    GET /api/webhook-whatsapp?hub.mode=subscribe&hub.verify_token=brytech_verify_2026
+                             &hub.challenge=1234567890
+    Status: 200 OK ✓
+    Response: "1234567890" (texto plano = el challenge exacto)
+
+  Test 2 — GET verificación (token incorrecto)
+    hub.verify_token = "token_falso_123"
+    Status: 403 Forbidden ✓
+    Response: { "error": "Verificación fallida. Token inválido o modo incorrecto." }
+
+  Test 3 — POST mensaje de texto (flujo completo)
+    Sender:  Carlos Ramírez (5214421234567)
+    Mensaje: "Necesito un sistema para mi restaurante donde registre pedidos
+              y mis meseros puedan tomar órdenes desde el celular."
+    Status: 200 OK ✓
+    OpenAI interpretó:
+      projectType: web_system
+      features:    [crud, database]
+      complexity:  medium
+    Pricing Engine estimó:
+      estimatedMin: $29,500 MXN
+      estimatedMax: $83,000 MXN
+      estimatedHours: 70 – 198 hrs
+
+  Test 4 — POST status update "delivered" (ignorado)
+    Status: 200 OK ✓
+    Response: { "status": "ignored", "reason": "Status update: delivered" }
+
+  Test 5 — POST mensaje de imagen (tipo no soportado)
+    Status: 200 OK ✓
+    Response: { "status": "ignored", "reason": "Message type \"image\" not yet supported." }
+
+  Test 6 — POST objeto inválido (no es WhatsApp)
+    body.object = "instagram"
+    Status: 200 OK ✓
+    Response: { "status": "ignored", "reason": "Not a WhatsApp Business event." }
+
+  TODOS LOS TESTS: 6/6 ✓
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. MEJORAS AL SISTEMA DE CHAT (v3 del prompt — realizadas por Bryan)
+────────────────────────────────────────────────────────────────────────────────
+
+  Durante el Paso 5, Bryan mejoró el system prompt de /api/chat y el
+  validateInterpretation() para incluir 4 categorías adicionales de
+  levantamiento de requerimientos:
+
+  features (alcance actual)
+    Lo que el cliente quiere en esta versión.
+    Solo features del catálogo mencionadas explícitamente.
+
+  futureFeatures (etapa futura)
+    Features mencionadas con: "después", "más adelante", "segunda etapa",
+    "eventualmente", etc.
+    → No se incluyen en el precio actual.
+
+  undecidedFeatures (incertidumbre del cliente)
+    Features mencionadas con: "tal vez", "no sé si", "quizá",
+    "habría que revisar", etc.
+    → No se incluyen en el precio actual.
+
+  knownInformation (hechos ya proporcionados)
+    Datos concretos que el cliente ya dio:
+    número de usuarios, industria, dispositivos, plazo, restricciones.
+    → No se repiten en missingInformation.
+
+  missingInformation (aún pendiente)
+    Preguntas específicas al tipo de proyecto que el cliente NO ha respondido.
+    → Después de filtrar knownInformation.
+
+  Resultado del nuevo response de /api/chat:
+    {
+      "interpretation": {
+        "projectType":        "web_system",
+        "features":           [...],       ← precio actual
+        "futureFeatures":     [...],       ← no en precio
+        "undecidedFeatures":  [...],       ← no en precio
+        "knownInformation":   [...],       ← ya sabemos esto
+        "complexity":         "medium",
+        "summary":            "...",
+        "missingInformation": [...]        ← preguntas pendientes
+      },
+      "estimate": { ... }
+    }
+
+  IMPACTO:
+    El sistema ya no es solo un "cotizador automático".
+    Es un asistente de levantamiento de requerimientos que distingue
+    entre lo que quieren ahora, lo que quieren después, lo que no saben,
+    y lo que ya dijeron — exactamente como haría Bryan en una junta.
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. SEGURIDAD PENDIENTE PARA PRODUCCIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+  Validación de firma HMAC-SHA256:
+    WhatsApp firma cada POST con tu App Secret usando HMAC-SHA256.
+    La firma llega en el header: X-Hub-Signature-256
+    Formato: "sha256=<hash>"
+
+    Validación (pendiente de implementar):
+      const expectedSig = 'sha256=' + crypto
+        .createHmac('sha256', process.env.WHATSAPP_APP_SECRET)
+        .update(rawBody)
+        .digest('hex');
+
+      if (req.headers['x-hub-signature-256'] !== expectedSig) {
+        return res.status(403).json({ error: 'Firma inválida.' });
+      }
+
+    Cuándo implementar: cuando Meta apruebe la cuenta y tengamos el
+    WHATSAPP_APP_SECRET real.
+
+  Deduplicación de mensajes:
+    WhatsApp puede reenviar el mismo mensaje si tu servidor tarda en responder.
+    Solución futura: guardar los messageId procesados en una base de datos
+    (Redis, Upstash, o tabla en Supabase) y verificar antes de procesar.
+
+
+────────────────────────────────────────────────────────────────────────────────
+9. PRÓXIMOS PASOS
+────────────────────────────────────────────────────────────────────────────────
+
+  Paso 6 — Make.com / Automatización
+    Crear un escenario en Make.com que:
+    - Reciba un trigger (formulario, webhook, email, etc.)
+    - Llame a POST /api/quote o POST /api/chat de BryTech
+    - Procese la respuesta y la reenvíe (email, Google Sheets, etc.)
+    - Demuestra el concepto de automatización sin código adicional en el backend.
+
+  Futuro — Cuando Meta apruebe la cuenta:
+    - Agregar WHATSAPP_PHONE_NUMBER_ID y WHATSAPP_ACCESS_TOKEN al .env
+    - Implementar la función sendWhatsAppMessage() en el webhook
+    - Implementar validación HMAC-SHA256
+    - Implementar deduplicación de mensajes
+
+================================================================================
+  FIN DEL DOCUMENTO — PASO 5
+================================================================================

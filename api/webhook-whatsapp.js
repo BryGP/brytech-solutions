@@ -117,6 +117,16 @@ function extractTextMessage(body) {
 
 export default async function handler(req, res) {
 
+  // Guardia: si WEBHOOK_VERIFY_TOKEN no está configurado, el webhook
+  // no puede operar de forma segura. Falla de forma explícita.
+  if (!VERIFY_TOKEN) {
+    console.error('[webhook-whatsapp] WEBHOOK_VERIFY_TOKEN no está configurado.');
+    return res.status(503).json({
+      error: 'WEBHOOK_VERIFY_TOKEN no está configurado en las variables de entorno.',
+      hint:  'Agrega WEBHOOK_VERIFY_TOKEN en .env.local (local) o en Vercel Dashboard (producción).',
+    });
+  }
+
   /* ── GET: Verificación del webhook ───────────────────────── */
   if (req.method === 'GET') {
     const mode      = req.query['hub.mode'];
