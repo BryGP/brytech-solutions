@@ -44,6 +44,16 @@ const EMAILJS_CONFIG = {
   welcomeTemplateId: 'template_ojcv5ye',
 };
 
+/* ============================================================
+   MAKE.COM WEBHOOK
+   ------------------------------------------------------------
+   URL del webhook de Make que dispara el escenario:
+     Webhook → /api/chat (OpenAI + Pricing) → Sheets → Gmail
+   Se llama de forma asíncrona (fire-and-forget) para nunca
+   bloquear al usuario mientras OpenAI procesa el análisis.
+   ============================================================ */
+const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/ekvrg78ewc9m0pxbjp8ebn59i47o19zq';
+
 
 /* ============================================================
    SECURITY CONFIGURATION
@@ -171,6 +181,11 @@ export function initContactForm() {
     try {
       // Strip any HTML from user inputs before sending.
       sanitizeFormInputs(form);
+
+      // Disparar webhook de Make en segundo plano (fire-and-forget).
+      // No se awaita: OpenAI puede tardar ~15s y el usuario no debe esperar.
+      // Si falla, solo se loggea en consola — nunca bloquea al usuario.
+      sendToMakeWebhook(form);
 
       // Send both emails in parallel:
       //   1. Notification to Bryan (templateId)
@@ -484,6 +499,38 @@ function containsSuspiciousContent(text) {
     /(https?:\/\/[^\s]+){3,}/i,
   ];
   return patterns.some(pattern => pattern.test(text));
+}
+
+
+/* ============================================================
+   MAKE.COM WEBHOOK SENDER
+   ------------------------------------------------------------
+   Recoge los campos del formulario y los envía al webhook de
+   Make como JSON. Se ejecuta en segundo plano:
+     - No se awaita en el submit handler.
+     - Los errores se absorben silenciosamente.
+   El payload es compatible con el escenario Make configurado:
+     nombre | email | telefono | descripcion
+   ============================================================ */
+async function sendToMakeWebhook(form) {
+  try {
+    const payload = {
+      nombre:      form.querySelector('#form-name')?.value.trim()    ?? '',
+      email:       form.querySelector('#form-email')?.value.trim()   ?? '',
+      telefono:    form.querySelector('#form-phone')?.value.trim()   || 'No proporcionado',
+      descripcion: form.querySelector('#form-message')?.value.trim() ?? '',
+    };
+    await fetch(MAKE_WEBHOOK_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    console.log('[BryTech] Make webhook disparado ✓');
+  } catch (err) {
+    // Fire-and-forget: si Make falla, el usuario ya recibió confirmación
+    // por EmailJS. No se muestra error al usuario.
+    console.warn('[BryTech] Make webhook falló silenciosamente:', err);
+  }
 }
 
 
