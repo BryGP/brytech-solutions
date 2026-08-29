@@ -48,7 +48,13 @@ export default async function handler(req, res) {
     });
   }
 
-  const { nombre, email, telefono, descripcion } = req.body ?? {};
+  const {
+    nombre,
+    email,
+    telefono,
+    servicio,
+    descripcion,
+  } = req.body ?? {};
 
   // Validaciones básicas de entrada
   if (!nombre || !email || !descripcion) {
@@ -74,6 +80,7 @@ export default async function handler(req, res) {
       nombre:      String(nombre).trim(),
       email:       String(email).trim(),
       telefono:    String(telefono || 'No proporcionado').trim(),
+      servicio:    String(servicio || 'No especificado').trim(),
       descripcion: String(descripcion).trim(),
       timestamp:   new Date().toISOString(),
     };

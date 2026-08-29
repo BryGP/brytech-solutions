@@ -506,6 +506,7 @@ async function sendToMakeWebhook(form) {
       nombre:      form.querySelector('#form-name')?.value.trim()    ?? '',
       email:       form.querySelector('#form-email')?.value.trim()   ?? '',
       telefono:    form.querySelector('#form-phone')?.value.trim()   || 'No proporcionado',
+      servicio:    form.querySelector('#form-service')?.value.trim() || 'No especificado',
       descripcion: form.querySelector('#form-message')?.value.trim() ?? '',
     };
     await fetch('/api/lead', {
