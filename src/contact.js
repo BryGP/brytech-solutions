@@ -44,16 +44,6 @@ const EMAILJS_CONFIG = {
   welcomeTemplateId: 'template_ojcv5ye',
 };
 
-/* ============================================================
-   MAKE.COM WEBHOOK
-   ------------------------------------------------------------
-   URL del webhook de Make que dispara el escenario:
-     Webhook → /api/chat (OpenAI + Pricing) → Sheets → Gmail
-   Se llama de forma asíncrona (fire-and-forget) para nunca
-   bloquear al usuario mientras OpenAI procesa el análisis.
-   ============================================================ */
-const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/ekvrg78ewc9m0pxbjp8ebn59i47o19zq';
-
 
 /* ============================================================
    SECURITY CONFIGURATION
@@ -503,14 +493,12 @@ function containsSuspiciousContent(text) {
 
 
 /* ============================================================
-   MAKE.COM WEBHOOK SENDER
+   LEAD DISPATCH (Backend Proxy /api/lead)
    ------------------------------------------------------------
-   Recoge los campos del formulario y los envía al webhook de
-   Make como JSON. Se ejecuta en segundo plano:
-     - No se awaita en el submit handler.
-     - Los errores se absorben silenciosamente.
-   El payload es compatible con el escenario Make configurado:
-     nombre | email | telefono | descripcion
+   Recoge los campos del formulario y los envía a la función
+   serverless /api/lead. Esta función backend lee la URL del
+   webhook de Make desde las variables de entorno para evitar
+   exponerla públicamente en el frontend compilado.
    ============================================================ */
 async function sendToMakeWebhook(form) {
   try {
@@ -520,16 +508,16 @@ async function sendToMakeWebhook(form) {
       telefono:    form.querySelector('#form-phone')?.value.trim()   || 'No proporcionado',
       descripcion: form.querySelector('#form-message')?.value.trim() ?? '',
     };
-    await fetch(MAKE_WEBHOOK_URL, {
+    await fetch('/api/lead', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload),
     });
-    console.log('[BryTech] Make webhook disparado ✓');
+    console.log('[BryTech] Lead enviado al backend /api/lead ✓');
   } catch (err) {
-    // Fire-and-forget: si Make falla, el usuario ya recibió confirmación
+    // Fire-and-forget: si falla, el usuario ya recibió confirmación
     // por EmailJS. No se muestra error al usuario.
-    console.warn('[BryTech] Make webhook falló silenciosamente:', err);
+    console.warn('[BryTech] Lead dispatch falló silenciosamente:', err);
   }
 }
 

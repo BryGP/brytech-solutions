@@ -87,10 +87,11 @@ Set these in the Vercel dashboard under **Project Settings > Environment Variabl
 | Variable | Used In | Description |
 |---|---|---|
 | `OPENAI_API_KEY` | `api/chat.js` | OpenAI secret key for GPT responses |
+| `MAKE_WEBHOOK_URL` | `api/lead.js` | Webhook URL for Make.com automated lead workflow |
 | `EMAILJS_SERVICE_ID` | `api/send-email.js` | EmailJS service identifier |
 | `EMAILJS_TEMPLATE_ID` | `api/send-email.js` | EmailJS template identifier |
 | `EMAILJS_PRIVATE_KEY` | `api/send-email.js` | EmailJS private key |
-| `WHATSAPP_VERIFY_TOKEN` | `api/webhook/whatsapp.js` | Custom token for Meta webhook verification |
+| `WEBHOOK_VERIFY_TOKEN` | `api/webhook-whatsapp.js` | Custom token for Meta webhook verification |
 | `WHATSAPP_API_TOKEN` | `api/webhook/whatsapp.js` | Bearer token from Meta for sending messages |
 | `WHATSAPP_PHONE_ID` | `api/webhook/whatsapp.js` | Phone Number ID from Meta Business dashboard |
 
@@ -102,8 +103,10 @@ Set these in the Vercel dashboard under **Project Settings > Environment Variabl
 |---|---|---|---|
 | `POST` | `/api/chat` | Active | AI chatbot — send a message, get a GPT reply |
 | `POST` | `/api/quote` | Active | Auto-quote — get price range for a service |
+| `POST` | `/api/lead` | Active | Lead ingestion — securely forwards contact data to Make.com |
+| `GET` | `/api/health` | Active | Health check — server status and timestamp |
 | `POST` | `/api/send-email` | Scaffold | Contact form server-side (not yet wired to frontend) |
-| `GET/POST` | `/api/webhook/whatsapp` | Scaffold | WhatsApp webhook (pending Meta access) |
+| `GET/POST` | `/api/webhook-whatsapp` | Active | WhatsApp webhook (Meta Cloud API verification & message receipt) |
 
 ---
 
