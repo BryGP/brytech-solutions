@@ -5,7 +5,10 @@
   "framework": null,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api/|@|src/|node_modules/)(?!.*\\.[a-z0-9]+$).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
