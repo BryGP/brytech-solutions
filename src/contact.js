@@ -509,11 +509,16 @@ async function sendToMakeWebhook(form) {
       servicio:    form.querySelector('#form-service')?.value.trim() || 'No especificado',
       descripcion: form.querySelector('#form-message')?.value.trim() ?? '',
     };
-    await fetch('/api/lead', {
+    const response = await fetch('/api/lead', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload),
     });
+
+    if (!response.ok) {
+      throw new Error(`/api/lead respondió ${response.status}`);
+    }
+
     console.log('[BryTech] Lead enviado al backend /api/lead ✓');
   } catch (err) {
     // Fire-and-forget: si falla, el usuario ya recibió confirmación
