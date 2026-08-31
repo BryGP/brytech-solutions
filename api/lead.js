@@ -26,6 +26,7 @@
        "nombre":      string,
        "email":       string,
        "telefono":    string,
+       "servicio":    string,
        "descripcion": string
      }
 
