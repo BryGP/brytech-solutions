@@ -2,9 +2,8 @@
    contact.js -- BryTech Solutions
    ------------------------------------------------------------
    Handles the contact form submission flow via EmailJS.
-   Sends two emails per submission:
-     1. Notification email to the site owner (Bryan).
-     2. Auto-reply / welcome confirmation to the client.
+   Sends the auto-reply / welcome confirmation email to the client.
+   (Lead capture and owner notifications are handled via Make.com).
 
    Security features included:
      - Honeypot hidden field to catch bots
@@ -14,12 +13,6 @@
      - Advanced email validation with blocked disposable domains
      - Suspicious content detection (script tags, spam URLs)
      - Double-submit protection via isSubmitting flag
-
-   KNOWN ISSUE (duplicate notification):
-     Both sendForm calls use the full form, so if the EmailJS
-     service is also configured with a default "To Email",
-     Bryan may receive the notification twice. See the submit
-     handler for the fix applied.
 
    (c) 2026 BryTech Solutions -- bryanalejandroprog17@gmail.com
    ============================================================ */
@@ -32,15 +25,12 @@ import emailjs from '@emailjs/browser';
    ------------------------------------------------------------
    publicKey        -- Public API key for EmailJS authentication.
    serviceId        -- The email service connected in EmailJS.
-   templateId       -- Template that notifies Bryan of a new
-                       contact submission.
    welcomeTemplateId-- Template that sends an auto-reply
                        confirmation to the client.
    ============================================================ */
 const EMAILJS_CONFIG = {
   publicKey: 'mit1CSeNxf3na8kIo',
   serviceId: 'service_9ut91b7',
-  templateId: 'template_9385jds',
   welcomeTemplateId: 'template_ojcv5ye',
 };
 
@@ -120,7 +110,7 @@ const KEY_SESSION     = 'bt_session_guard';
    Called once from main.js on DOMContentLoaded. Sets up the
    EmailJS SDK, locates the form element, and attaches the
    submit event listener that orchestrates validation, security
-   checks, and the dual-email send flow.
+   checks, client confirmation email, and lead dispatch.
    ============================================================ */
 export function initContactForm() {
   emailjs.init(EMAILJS_CONFIG.publicKey);
@@ -177,21 +167,12 @@ export function initContactForm() {
       // Si falla, solo se loggea en consola — nunca bloquea al usuario.
       sendToMakeWebhook(form);
 
-      // Send both emails in parallel:
-      //   1. Notification to Bryan (templateId)
-      //   2. Auto-reply to client  (welcomeTemplateId)
-      await Promise.all([
-        emailjs.sendForm(
-          EMAILJS_CONFIG.serviceId,
-          EMAILJS_CONFIG.templateId,
-          form
-        ),
-        emailjs.sendForm(
-          EMAILJS_CONFIG.serviceId,
-          EMAILJS_CONFIG.welcomeTemplateId,
-          form
-        ),
-      ]);
+      // Send auto-reply / confirmation email to the client:
+      await emailjs.sendForm(
+        EMAILJS_CONFIG.serviceId,
+        EMAILJS_CONFIG.welcomeTemplateId,
+        form
+      );
 
       // Record this submission for rate-limit tracking.
       registerSubmission();
