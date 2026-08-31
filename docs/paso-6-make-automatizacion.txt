@@ -1,0 +1,149 @@
+================================================================
+PASO 6 — Make.com: Automatización de Leads con IA
+================================================================
+Versión: v2.0.0
+Fecha:   2026-08-29
+Autor:   Bryan GP / BryTech Solutions
+
+----------------------------------------------------------------
+OBJETIVO
+----------------------------------------------------------------
+Automatizar el flujo completo de un lead desde que llena el
+formulario de contacto en la web hasta que:
+  1. La IA (OpenAI) analiza y estima el proyecto.
+  2. El lead se guarda en Google Sheets.
+  3. Bryan recibe un email con el análisis detallado.
+
+----------------------------------------------------------------
+ARQUITECTURA DEL FLUJO
+----------------------------------------------------------------
+
+  [Formulario Web]
+       │
+       ▼ POST /api/lead  (Vercel Serverless — seguro)
+  [api/lead.js]
+       │  Lee MAKE_WEBHOOK_URL de process.env
+       │  (URL nunca expuesta en el bundle JS del frontend)
+       ▼
+  [Make.com Webhook]
+       │
+       ├──▶ Módulo HTTP  → POST /api/chat
+       │         │         (OpenAI gpt-4o-mini + Pricing Engine)
+       │         ▼
+       │    Respuesta JSON:
+       │      { interpretation: { projectType, complexity, summary },
+       │        estimate: { estimatedMin, estimatedMax, ... } }
+       │
+       ├──▶ Módulo Google Sheets → Add a Row
+       │         Columnas: Fecha | Nombre | Email | Teléfono |
+       │                   Tipo Proyecto | Complejidad |
+       │                   Estimado Min | Estimado Max
+       │
+       └──▶ Módulo Gmail → Send an Email
+                 Subject: 🔔 Nuevo lead BryTech — {tipo} — ${min}–${max} MXN
+                 Body:    HTML con datos del cliente + análisis de IA
+
+----------------------------------------------------------------
+SEGURIDAD IMPLEMENTADA
+----------------------------------------------------------------
+  ✓ MAKE_WEBHOOK_URL nunca expuesta en src/ ni en el bundle JS.
+  ✓ Frontend llama a /api/lead (ruta interna relativa).
+  ✓ api/lead.js actúa como proxy seguro, leyendo la URL de
+    process.env en el servidor.
+  ✓ Si MAKE_WEBHOOK_URL no está configurada → 503 explícito.
+  ✓ Validación de campos obligatorios: nombre, email, descripcion.
+  ✓ response.ok check: si Make responde 4xx/5xx → throw silencioso.
+
+----------------------------------------------------------------
+VARIABLES DE ENTORNO REQUERIDAS
+----------------------------------------------------------------
+  MAKE_WEBHOOK_URL
+    Valor:  https://hook.us2.make.com/ekvrg78ewc9m0pxbjp8ebn59i47o19zq
+    Local:  .env.local
+    Prod:   Vercel Dashboard → Settings → Environment Variables
+
+  OPENAI_API_KEY        (requerida por /api/chat)
+  BASE_URL              (requerida por /api/chat en prod)
+
+----------------------------------------------------------------
+ARCHIVOS INVOLUCRADOS
+----------------------------------------------------------------
+  api/lead.js           Serverless proxy → Make.com
+  api/chat.js           Endpoint IA + Pricing Engine
+  src/contact.js        sendToMakeWebhook() — fire-and-forget
+  vercel.json           Routing /api/* y rewrites SPA
+
+----------------------------------------------------------------
+BUG RESUELTO — vercel.json SPA rewrite (2026-08-31)
+----------------------------------------------------------------
+SÍNTOMA:
+  Al correr `vercel dev`, el frontend cargaba sin CSS ni JS.
+  El sitio se veía como HTML plano sin estilos.
+
+CAUSA:
+  La rewrite SPA en vercel.json era demasiado amplia:
+    "/((?!api/).*)" → "/index.html"
+  Interceptaba TODAS las peticiones que no comenzaran con /api/,
+  incluyendo las peticiones de módulos del servidor de desarrollo
+  de Vite: /@vite/client, /src/main.js, /src/style.css, etc.
+  Vite recibía index.html en lugar del módulo JS, y su plugin
+  vite:import-analysis fallaba al parsear HTML como JavaScript
+  (el símbolo @ del email bryanalejandroprog17@gmail.com en el
+  comentario del archivo activaba el error de sintaxis).
+
+SOLUCIÓN:
+  Se ajustó el patrón para excluir:
+    - Rutas que empiecen con @  (módulos internos de Vite)
+    - Rutas que empiecen con src/
+    - Rutas que empiecen con node_modules/
+    - Rutas con extensión de archivo (.js, .css, .svg, etc.)
+
+  Nuevo patrón:
+    "/((?!api/|@|src/|node_modules/)(?!.*\\.[a-z0-9]+$).*)"
+
+  Esto garantiza que el SPA fallback solo aplica a rutas de
+  navegación puras (sin extensión) como /contacto, /about, etc.
+  tanto en desarrollo (vercel dev) como en producción.
+
+COMMIT: fix: narrow SPA rewrite in vercel.json to not intercept
+        Vite dev module requests
+
+----------------------------------------------------------------
+GOOGLE SHEETS — BryTech Leads
+----------------------------------------------------------------
+  URL: https://docs.google.com/spreadsheets/d/1M_4CAxPD1tLL-eyzuSjOYYUmC2b1ROAeq82B5OXTznA
+  Columnas:
+    A: Fecha (ISO timestamp de Make)
+    B: Nombre
+    C: Email
+    D: Teléfono
+    E: Tipo Proyecto  (de OpenAI: web_system, ecommerce, etc.)
+    F: Complejidad    (low, medium, high)
+    G: Estimado Min   (MXN)
+    H: Estimado Max   (MXN)
+
+----------------------------------------------------------------
+ACTIVACIÓN EN PRODUCCIÓN
+----------------------------------------------------------------
+  1. Confirmar MAKE_WEBHOOK_URL en Vercel Dashboard ✓
+  2. Activar escenario en Make.com (toggle OFF → ON)
+  3. Probar con submit real del formulario en producción
+
+----------------------------------------------------------------
+PRUEBA MANUAL (PowerShell)
+----------------------------------------------------------------
+  Invoke-WebRequest "https://brygp-solutions.vercel.app/api/lead" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Body '{
+      "nombre": "Test User",
+      "email": "test@test.com",
+      "telefono": "442-000-0000",
+      "servicio": "Sistema web",
+      "descripcion": "App de inventario con login para 3 usuarios"
+    }' -UseBasicParsing
+
+  Respuesta esperada (200):
+    {"status":"success","message":"Lead procesado y enviado a Make correctamente."}
+
+================================================================
