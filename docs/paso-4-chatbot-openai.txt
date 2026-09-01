@@ -291,5 +291,175 @@ El sistema responde:
     Auto-detecta cuál modo usar según la API key.
 
 ================================================================================
+  10. MEJORAS AL PROMPT Y AL CÓDIGO — 2026-09-01
+================================================================================
+
+  Commit: feat: improve prompt engineering in chat.js
+
+────────────────────────────────────────────────────────────────────────────────
+  10.1 NUEVO FORMATO DE RESPUESTA (interpretation)
+────────────────────────────────────────────────────────────────────────────────
+
+  El objeto "interpretation" ahora incluye cuatro listas de alcance:
+
+    "projectType":        string      ← sin cambios
+    "features":           string[]    ← alcance ACTUAL confirmado
+    "futureFeatures":     string[]    ← NEW: funcionalidades para etapas posteriores
+    "undecidedFeatures":  string[]    ← NEW: funcionalidades que el usuario dudó
+    "knownInformation":   string[]    ← NEW: hechos concretos del usuario
+    "complexity":         string      ← sin cambios
+    "summary":            string      ← sin cambios
+    "missingInformation": string[]    ← sin cambios
+
+  Por qué se separaron en tres listas:
+    Antes, todo lo que no era "features" o "missingInformation" se perdía.
+    Ahora el sistema conserva lo que el usuario mencionó para después
+    (futureFeatures) y lo que no está decidido (undecidedFeatures),
+    lo que permite un mejor contexto para futuras conversaciones.
+
+────────────────────────────────────────────────────────────────────────────────
+  10.2 REGLAS ESTRICTAS DE EVIDENCIA
+────────────────────────────────────────────────────────────────────────────────
+
+  Problema original:
+    El modelo agregaba features por "buenas prácticas" o por considerarlas
+    habituales en proyectos similares, aunque el usuario no las pidiera.
+    Ejemplo: agregaba "two_factor_auth" solo porque había "authentication".
+
+  Solución implementada en el prompt:
+
+    Antes de incluir CUALQUIER feature, el modelo debe comprobar que existe
+    evidencia concreta en el mensaje del usuario. Una feature solo se incluye
+    cuando el usuario la pidió explícitamente (A) o es técnicamente inevitable
+    para cumplir una funcionalidad ya solicitada (B).
+
+    NO se infieren features por:
+    - buenas prácticas
+    - seguridad recomendada
+    - conveniencia
+    - arquitectura habitual
+    - funcionalidades comunes en proyectos similares
+
+  Reglas específicas añadidas:
+
+    TWO_FACTOR_AUTH
+      Solo si el usuario menciona explícitamente: 2FA, doble factor, MFA,
+      autenticación multifactor, código adicional.
+
+    NOTIFICATIONS
+      Solo si el usuario menciona: alertas, avisos, notificaciones,
+      recordatorios en el alcance actual. No se infiere por la presencia
+      de fechas, eventos o dashboards.
+
+    FILE_UPLOAD
+      Solo cuando el usuario puede SUBIR archivos, fotografías o documentos.
+      NO aplica si el sistema genera archivos (PDF, Excel, reportes).
+
+    GENERACIÓN DE DOCUMENTOS
+      Generar PDF, constancias, Excel exportado → usar "reports" o "data_export",
+      NO "file_upload". Si ninguna feature del catálogo representa la generación,
+      se conserva en knownInformation sin inventar otra feature.
+
+    ROLES + AUTHENTICATION
+      Frases como "cada empleado verá solo sus registros" o "distintos permisos"
+      implican roles_permissions + authentication. Ambas deben incluirse.
+
+    CRUD
+      Si el usuario necesita administrar, crear, editar o eliminar información
+      desde el sistema, CRUD pertenece al alcance actual.
+
+────────────────────────────────────────────────────────────────────────────────
+  10.3 DEFINICIONES DE TIPO DE PROYECTO
+────────────────────────────────────────────────────────────────────────────────
+
+  El prompt ahora define explícitamente cuándo usar cada projectType,
+  para evitar que el modelo escoja el tipo por funcionalidades futuras:
+
+    landing_page   — Página informativa pequeña, CTA, formulario, contacto.
+    corporate_site — Sitio más amplio: catálogo, portafolio, contenido administ.
+    web_system     — Aplicación con usuarios, roles, módulos, lógica de negocio.
+    ecommerce      — Solo si el alcance actual incluye carrito, checkout o pagos.
+                     Mostrar productos/precios NO convierte un proyecto en ecommerce.
+    automation     — Objetivo principal: ejecutar proceso automático o sincronizar.
+    api_rest       — Entregable principal es una API, no una aplicación completa.
+    data_dashboard — Objetivo principal: visualizar métricas, KPIs, gráficas.
+
+  Regla clave: las funcionalidades FUTURAS no cambian el projectType actual.
+
+────────────────────────────────────────────────────────────────────────────────
+  10.4 CATEGORIZACIÓN DEL ALCANCE
+────────────────────────────────────────────────────────────────────────────────
+
+  El prompt ahora distingue explícitamente cuatro categorías:
+
+    ALCANCE ACTUAL       → features
+    FUNCIONALIDADES FUTURAS (más adelante, segunda etapa) → futureFeatures
+    FUNCIONALIDADES INCIERTAS (tal vez, quizá, no sé si) → undecidedFeatures
+    DATOS CONOCIDOS      → knownInformation
+
+  Regla de FUTURO + DUDA:
+    "más adelante quizá..." → undecidedFeatures
+    La incertidumbre tiene prioridad sobre la temporalidad.
+
+  Regla de NO DUPLICACIÓN:
+    Una misma feature no puede aparecer en más de una lista.
+    Prioridad: features > futureFeatures > undecidedFeatures.
+
+  Regla de misma feature en diferentes etapas:
+    Si una feature existe ahora Y tendrá una ampliación futura:
+    → feature solo en "features"
+    → ampliación descrita en "knownInformation"
+    → NO duplicarla en futureFeatures
+
+  Regla de descarte explícito:
+    Si el usuario dice "no quiero" o "no necesito":
+    → NO incluirla en ninguna lista de funcionalidades.
+    → Conservarla únicamente en knownInformation si es relevante.
+
+────────────────────────────────────────────────────────────────────────────────
+  10.5 REVISIÓN INTERNA ANTES DE RESPONDER (checklist)
+────────────────────────────────────────────────────────────────────────────────
+
+  El prompt instruye al modelo a verificar internamente 11 puntos
+  antes de devolver el JSON:
+
+    1. ¿Todas las features pertenecen al catálogo?
+    2. ¿Cada feature tiene evidencia concreta en el mensaje?
+    3. ¿Inventé alguna feature por considerarla recomendable?
+    4. ¿Alguna feature actual está erróneamente en futureFeatures?
+    5. ¿Alguna feature incierta está marcada como confirmada?
+    6. ¿Una funcionalidad futura cambió incorrectamente el projectType?
+    7. ¿Confundí generación de archivos con file_upload?
+    8. ¿Existen roles o permisos sin authentication?
+    9. ¿Hay información en missingInformation que el usuario ya dio?
+   10. ¿Alguna feature aparece en más de una categoría?
+   11. ¿El summary describe solo el alcance actual?
+
+────────────────────────────────────────────────────────────────────────────────
+  10.6 MEJORAS EN CÓDIGO (validateInterpretation + handler)
+────────────────────────────────────────────────────────────────────────────────
+
+  A. Deduplicación de features (validateInterpretation):
+       let validFeatures = [...new Set(originalFeatures.filter(...))]
+       Evita que la misma feature aparezca duplicada si OpenAI la repite.
+
+  B. Regla de consistencia roles → authentication (validateInterpretation):
+       Si el modelo incluyó "roles_permissions" pero olvidó "authentication",
+       el backend la agrega automáticamente como salvaguarda.
+       Solo aplica si "authentication" existe en el catálogo.
+
+  C. Detección de placeholders sin resolver (handler):
+       if (/{{[^{}]+}}/.test(message)) → 400
+       Previene que lleguen a OpenAI mensajes con variables como {{nombre}}
+       o {{descripcion}} sin haber sido sustituidas por el cliente.
+
+  D. Regla determinista para two_factor_auth (hasExplicitTwoFactorAuth):
+       Filtro estricto en backend: si el mensaje del usuario no contiene
+       mención explícita de 2FA, MFA, doble factor o multifactor, se
+       elimina automáticamente "two_factor_auth" de validFeatures,
+       validFutureFeatures y validUndecidedFeatures. Previene sobrecostos
+       por alucinaciones comunes de seguridad.
+
+================================================================================
   FIN DEL DOCUMENTO — PASO 4
 ================================================================================

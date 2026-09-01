@@ -894,14 +894,36 @@ async function callOpenAI(userMessage, apiKey) {
 /* ── Validación de la respuesta de OpenAI ───────────────────── */
 
 /**
+ * Detecta si el usuario solicitó explícitamente autenticación de dos factores / 2FA.
+ *
+ * @param {string} message
+ * @returns {boolean}
+ */
+function hasExplicitTwoFactorAuth(message) {
+  if (!message || typeof message !== 'string') return false;
+  const text = message.toLowerCase();
+
+  return (
+    /\b2fa\b/.test(text) ||
+    /\bmfa\b/.test(text) ||
+    text.includes('doble factor') ||
+    text.includes('dos factores') ||
+    text.includes('autenticación multifactor') ||
+    text.includes('autenticacion multifactor')
+  );
+}
+
+/**
  * Verifica que la estructura devuelta por OpenAI sea válida antes de
  * pasarla al Pricing Engine. Si OpenAI alucinó un valor fuera del
- * catálogo, lo filtramos aquí.
+ * catálogo o infirió features peligrosas sin mención explícita,
+ * lo filtramos aquí.
  *
  * @param {Object} interpretation — JSON devuelto por OpenAI
+ * @param {string} message — Mensaje original del usuario
  * @returns {{ valid: boolean, errors: string[], cleaned: Object }}
  */
-function validateInterpretation(interpretation) {
+function validateInterpretation(interpretation, message = '') {
   const catalog = getCatalog();
   const errors = [];
 
@@ -952,7 +974,7 @@ function validateInterpretation(interpretation) {
     ? interpretation.futureFeatures
     : [];
 
-  const validFutureFeatures = originalFutureFeatures
+  let validFutureFeatures = originalFutureFeatures
     .filter(f => catalog.features.includes(f))
     .filter(f => !validFeatures.includes(f));
 
@@ -961,10 +983,25 @@ function validateInterpretation(interpretation) {
     ? interpretation.undecidedFeatures
     : [];
 
-  const validUndecidedFeatures = originalUndecidedFeatures
+  let validUndecidedFeatures = originalUndecidedFeatures
     .filter(f => catalog.features.includes(f))
     .filter(f => !validFeatures.includes(f))
     .filter(f => !validFutureFeatures.includes(f));
+
+  // ── Reglas deterministas de protección contra alucinaciones ────
+  if (!hasExplicitTwoFactorAuth(message)) {
+    validFeatures = validFeatures.filter(
+      feature => feature !== 'two_factor_auth'
+    );
+
+    validFutureFeatures = validFutureFeatures.filter(
+      feature => feature !== 'two_factor_auth'
+    );
+
+    validUndecidedFeatures = validUndecidedFeatures.filter(
+      feature => feature !== 'two_factor_auth'
+    );
+  }
 
   // ── Información conocida ───────────────────────────────────
   const knownInformation = Array.isArray(interpretation.knownInformation)
@@ -1043,7 +1080,7 @@ export default async function handler(req, res) {
     const rawInterpretation = await callOpenAI(message.trim(), OPENAI_API_KEY);
 
     // ── Paso 2: Backend valida la respuesta de OpenAI ─────────
-    const { valid, errors, cleaned } = validateInterpretation(rawInterpretation);
+    const { valid, errors, cleaned } = validateInterpretation(rawInterpretation, message.trim());
 
     if (!valid) {
       console.error('[chat.js] Respuesta inválida de OpenAI:', errors, rawInterpretation);
