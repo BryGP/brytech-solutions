@@ -1084,12 +1084,6 @@ function validateInterpretation(interpretation, message = '') {
   }
 
   // 4. notifications futura + duda → incierta
-  console.log('DEBUG notifications:', {
-    detected: hasUncertainNotifications(message),
-    futureFeatures: validFutureFeatures,
-    undecidedFeatures: validUndecidedFeatures,
-  });
-
   if (
     validFutureFeatures.includes('notifications') &&
     hasUncertainNotifications(message)

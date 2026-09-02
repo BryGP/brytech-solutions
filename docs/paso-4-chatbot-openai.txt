@@ -558,19 +558,6 @@ El sistema responde:
     Si notifications está en futureFeatures Y hay incertidumbre detectada:
       → se mueve de futureFeatures a undecidedFeatures
 
-  NOTA DE DEBUG (temporal — solo local):
-    Se agregó un console.log temporal antes del guard 5 para verificar
-    que hasUncertainNotifications() detecta correctamente el mensaje
-    y que las listas futureFeatures/undecidedFeatures tienen el estado
-    esperado antes de aplicar la regla.
-    Debe removerse antes del siguiente push a producción.
-
-    console.log('DEBUG notifications:', {
-      detected: hasUncertainNotifications(message),
-      futureFeatures: validFutureFeatures,
-      undecidedFeatures: validUndecidedFeatures,
-    });
-
   Resumen de guards deterministas activos en validateInterpretation():
 
     Guard 1 — two_factor_auth   → solo si mención explícita de 2FA/MFA
