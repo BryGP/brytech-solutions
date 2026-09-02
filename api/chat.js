@@ -861,6 +861,8 @@ async function callOpenAI(userMessage, apiKey) {
  * @param {string} message
  * @returns {boolean}
  */
+
+// Helper functions to detect specific features
 function hasExplicitTwoFactorAuth(message) {
   if (!message || typeof message !== 'string') return false;
   const text = message.toLowerCase();
@@ -873,6 +875,47 @@ function hasExplicitTwoFactorAuth(message) {
     text.includes('autenticación multifactor') ||
     text.includes('autenticacion multifactor')
   );
+}
+
+// Helper function to detect if the user explicitly requested file upload functionality
+function hasExplicitFileUpload(message) {
+  if (!message || typeof message !== 'string') return false;
+
+  const text = message.toLowerCase();
+
+  return /\b(subir|adjuntar|cargar)\b.{0,40}\b(archivo|archivos|foto|fotos|fotografía|fotografías|fotografia|fotografias|imagen|imágenes|imagenes|documento|documentos|csv)\b/.test(text);
+
+}
+
+// Helper function to detect if the user mentioned API integration with uncertainty
+function hasUncertainApiIntegration(message) {
+  if (!message || typeof message !== 'string') return false;
+
+  const text = message.toLowerCase();
+
+  const mentionsApi =
+    /\bapi\b/.test(text) ||
+    text.includes('integración') ||
+    text.includes('integracion');
+
+  const hasUncertainty =
+    text.includes('quizá') ||
+    text.includes('quiza') ||
+    text.includes('tal vez') ||
+    text.includes('posiblemente') ||
+    text.includes('probablemente') ||
+    text.includes('podríamos') ||
+    text.includes('podriamos') ||
+    text.includes('podría') ||
+    text.includes('podria') ||
+    text.includes('tenemos que confirmar') ||
+    text.includes('debemos confirmar') ||
+    text.includes('falta confirmar') ||
+    text.includes('si el proveedor lo permite') ||
+    text.includes('si el proveedor ofrece') ||
+    text.includes('si es posible');
+
+  return mentionsApi && hasUncertainty;
 }
 
 /**
@@ -936,21 +979,32 @@ function validateInterpretation(interpretation, message = '') {
     ? interpretation.futureFeatures
     : [];
 
-  let validFutureFeatures = originalFutureFeatures
-    .filter(f => catalog.features.includes(f))
-    .filter(f => !validFeatures.includes(f));
+  let validFutureFeatures = [
+    ...new Set(
+      originalFutureFeatures
+        .filter(f => catalog.features.includes(f))
+        .filter(f => !validFeatures.includes(f))
+    )
+  ];
 
   // ── Features inciertas ─────────────────────────────────────
   const originalUndecidedFeatures = Array.isArray(interpretation.undecidedFeatures)
     ? interpretation.undecidedFeatures
     : [];
 
-  let validUndecidedFeatures = originalUndecidedFeatures
-    .filter(f => catalog.features.includes(f))
-    .filter(f => !validFeatures.includes(f))
-    .filter(f => !validFutureFeatures.includes(f));
+  let validUndecidedFeatures = [
+    ...new Set(
+      originalUndecidedFeatures
+        .filter(f => catalog.features.includes(f))
+        .filter(f => !validFeatures.includes(f))
+        .filter(f => !validFutureFeatures.includes(f))
+    )
+  ];
 
   // ── Reglas deterministas de protección contra alucinaciones ────
+
+  // 1. two_factor_auth sólo puede existir si el usuario lo pidió
+  // explícitamente.
   if (!hasExplicitTwoFactorAuth(message)) {
     validFeatures = validFeatures.filter(
       feature => feature !== 'two_factor_auth'
@@ -963,6 +1017,36 @@ function validateInterpretation(interpretation, message = '') {
     validUndecidedFeatures = validUndecidedFeatures.filter(
       feature => feature !== 'two_factor_auth'
     );
+  }
+
+  // 2. file_upload sólo puede existir si el usuario indicó
+  // explícitamente que necesita subir, cargar o adjuntar archivos.
+  if (!hasExplicitFileUpload(message)) {
+    validFeatures = validFeatures.filter(
+      feature => feature !== 'file_upload'
+    );
+
+    validFutureFeatures = validFutureFeatures.filter(
+      feature => feature !== 'file_upload'
+    );
+
+    validUndecidedFeatures = validUndecidedFeatures.filter(
+      feature => feature !== 'file_upload'
+    );
+  }
+
+  // 3. api_integration futura + duda → incierta
+  if (
+    validFutureFeatures.includes('api_integration') &&
+    hasUncertainApiIntegration(message)
+  ) {
+    validFutureFeatures = validFutureFeatures.filter(
+      feature => feature !== 'api_integration'
+    );
+
+    if (!validUndecidedFeatures.includes('api_integration')) {
+      validUndecidedFeatures.push('api_integration');
+    }
   }
 
   // ── Información conocida ───────────────────────────────────
