@@ -461,5 +461,44 @@ El sistema responde:
        por alucinaciones comunes de seguridad.
 
 ================================================================================
+  10.7 REFINAMIENTOS AL PROMPT — 2026-09-02
+================================================================================
+
+  Commit: feat(chat): refine prompt — semantic missingInfo dedup, max 3 questions,
+          knownInfo as fallback for unmapped reqs, tighter review checklist
+
+  A. missingInformation — máximo 3 elementos
+       El modelo solo puede incluir hasta 3 preguntas en missingInformation.
+       Evita listas largas de preguntas genéricas que no agregan valor.
+
+  B. Comparación semántica en missingInformation
+       Antes de incluir una pregunta, el modelo verifica si el usuario ya
+       la respondió con otras palabras.
+       Ejemplo: "Somos 22 personas." → NO preguntar "¿Cuántos usuarios tendrá?"
+
+  C. knownInformation como fallback de requerimientos sin feature exacta
+       Si un requerimiento del usuario no puede representarse con ninguna feature
+       del catálogo (ej. "firma digital"), se conserva en knownInformation
+       en lugar de sustituirlo por una feature aproximada.
+
+  D. Complejidad separada en sección propia (sección 12 del prompt)
+       Definiciones más claras:
+         simple  — pocos módulos, alcance claro, baja incertidumbre
+         medium  — varios módulos, roles, integraciones moderadas o incertidumbre
+         complex — múltiples sistemas interconectados, gran escala, arquitectura exigente
+       Regla explícita: funcionalidades futuras o inciertas NO elevan la complejidad.
+
+  E. Checklist de revisión final ampliado (sección 16)
+       Se añadieron verificaciones específicas:
+         - ¿Sustituí un requerimiento por una feature simplemente parecida?
+         - ¿Confundí firma/aprobación digital con notifications, auth o file_upload?
+         - ¿Alguna capacidad de un sistema externo existente se convirtió en feature?
+
+  F. Sección SALIDA simplificada
+       Se eliminaron las restricciones redundantes del formato de respuesta
+       (ya cubiertas por las instrucciones del prompt). El bloque final
+       solo muestra el esquema JSON sin comentarios adicionales.
+
+================================================================================
   FIN DEL DOCUMENTO — PASO 4
 ================================================================================
