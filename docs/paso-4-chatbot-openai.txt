@@ -542,12 +542,29 @@ El sistema responde:
     validUndecidedFeatures, igual que ya se hacía con validFeatures.
     Garantiza que ninguna feature aparezca duplicada en ninguna lista.
 
+  D. Guard 5 — notifications con incertidumbre (hasUncertainNotifications)
+  ──────────────────────────────────────────────────────────────────────────
+  Problema:
+    El modelo colocaba "notifications" en futureFeatures aunque el usuario
+    expresaba duda sobre si los recordatorios o avisos eran realmente
+    necesarios o posibles.
+
+  Solución:
+    Nueva función helper hasUncertainNotifications(message) que detecta:
+      - Mención de notificación/recordatorio/aviso en el mensaje, Y
+      - Expresión de duda: "quizá/tal vez/posiblemente/podría/podríamos/
+        estamos considerando/estamos evaluando/todavía no/no hemos decidido"
+
+    Si notifications está en futureFeatures Y hay incertidumbre detectada:
+      → se mueve de futureFeatures a undecidedFeatures
+
   Resumen de guards deterministas activos en validateInterpretation():
 
-    Guard 1 — two_factor_auth   → solo si hay mención explícita de 2FA/MFA
-    Guard 2 — file_upload       → solo si hay mención explícita de subir archivos
+    Guard 1 — two_factor_auth   → solo si mención explícita de 2FA/MFA
+    Guard 2 — file_upload       → solo si mención explícita de subir archivos
     Guard 3 — api_integration   → mueve a undecidedFeatures si hay duda explícita
-    Guard 4 — authentication    → se agrega automáticamente si roles_permissions está presente
+    Guard 4 — authentication    → se agrega si roles_permissions está presente
+    Guard 5 — notifications     → mueve a undecidedFeatures si hay duda explícita
 
 ================================================================================
   FIN DEL DOCUMENTO — PASO 4
