@@ -500,5 +500,55 @@ El sistema responde:
        solo muestra el esquema JSON sin comentarios adicionales.
 
 ================================================================================
+  10.8 NUEVAS GUARDS DETERMINISTAS — 2026-09-02
+================================================================================
+
+  A. Guard 2 — file_upload (hasExplicitFileUpload)
+  ─────────────────────────────────────────────────
+  Problema:
+    El modelo incluía "file_upload" cuando el sistema iba a GENERAR archivos
+    (PDFs, constancias, Excel), confundiéndolo con la capacidad de que el
+    USUARIO suba archivos.
+
+  Solución:
+    Nueva función helper hasExplicitFileUpload(message) que busca con regex
+    frases de carga explícita:
+      "subir/adjuntar/cargar" + "archivo/foto/fotografía/imagen/documento/csv"
+
+    Si no se detecta → se elimina "file_upload" de:
+      - validFeatures
+      - validFutureFeatures
+      - validUndecidedFeatures
+
+  B. Guard 3 — api_integration con incertidumbre (hasUncertainApiIntegration)
+  ─────────────────────────────────────────────────────────────────────────────
+  Problema:
+    El modelo colocaba "api_integration" en futureFeatures incluso cuando
+    el usuario expresaba duda sobre si la integración era posible o dependía
+    de confirmaciones externas.
+
+  Solución:
+    Nueva función helper hasUncertainApiIntegration(message) que detecta:
+      - Mención de "api" o "integración/integracion" en el mensaje, Y
+      - Expresión de duda: "quizá/tal vez/posiblemente/podría/podríamos/
+        tenemos que confirmar/si el proveedor lo permite..."
+
+    Si api_integration está en futureFeatures Y hay incertidumbre detectada:
+      → se mueve de futureFeatures a undecidedFeatures
+
+  C. Deduplicación extendida a futureFeatures y undecidedFeatures
+  ──────────────────────────────────────────────────────────────────
+    Se aplicó [...new Set(...)] también a validFutureFeatures y
+    validUndecidedFeatures, igual que ya se hacía con validFeatures.
+    Garantiza que ninguna feature aparezca duplicada en ninguna lista.
+
+  Resumen de guards deterministas activos en validateInterpretation():
+
+    Guard 1 — two_factor_auth   → solo si hay mención explícita de 2FA/MFA
+    Guard 2 — file_upload       → solo si hay mención explícita de subir archivos
+    Guard 3 — api_integration   → mueve a undecidedFeatures si hay duda explícita
+    Guard 4 — authentication    → se agrega automáticamente si roles_permissions está presente
+
+================================================================================
   FIN DEL DOCUMENTO — PASO 4
 ================================================================================
