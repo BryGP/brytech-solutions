@@ -918,6 +918,40 @@ function hasUncertainApiIntegration(message) {
   return mentionsApi && hasUncertainty;
 }
 
+// Helper function to detect if the user mentioned notifications with uncertainty
+function hasUncertainNotifications(message) {
+  if (!message || typeof message !== 'string') return false;
+
+  const text = message.toLowerCase();
+
+  const mentionsNotifications =
+    text.includes('notificación') ||
+    text.includes('notificacion') ||
+    text.includes('notificaciones') ||
+    text.includes('recordatorio') ||
+    text.includes('recordatorios') ||
+    text.includes('aviso') ||
+    text.includes('avisos');
+
+  const hasUncertainty =
+    text.includes('quizá') ||
+    text.includes('quiza') ||
+    text.includes('tal vez') ||
+    text.includes('posiblemente') ||
+    text.includes('probablemente') ||
+    text.includes('podríamos') ||
+    text.includes('podriamos') ||
+    text.includes('podría') ||
+    text.includes('podria') ||
+    text.includes('estamos considerando') ||
+    text.includes('estamos evaluando') ||
+    text.includes('todavía no') ||
+    text.includes('todavia no') ||
+    text.includes('no hemos decidido');
+
+  return mentionsNotifications && hasUncertainty;
+}
+
 /**
  * Verifica que la estructura devuelta por OpenAI sea válida antes de
  * pasarla al Pricing Engine. Si OpenAI alucinó un valor fuera del
@@ -1046,6 +1080,26 @@ function validateInterpretation(interpretation, message = '') {
 
     if (!validUndecidedFeatures.includes('api_integration')) {
       validUndecidedFeatures.push('api_integration');
+    }
+  }
+
+  // 4. notifications futura + duda → incierta
+  console.log('DEBUG notifications:', {
+    detected: hasUncertainNotifications(message),
+    futureFeatures: validFutureFeatures,
+    undecidedFeatures: validUndecidedFeatures,
+  });
+
+  if (
+    validFutureFeatures.includes('notifications') &&
+    hasUncertainNotifications(message)
+  ) {
+    validFutureFeatures = validFutureFeatures.filter(
+      feature => feature !== 'notifications'
+    );
+
+    if (!validUndecidedFeatures.includes('notifications')) {
+      validUndecidedFeatures.push('notifications');
     }
   }
 
